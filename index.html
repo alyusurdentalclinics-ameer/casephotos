@@ -846,7 +846,12 @@ function archRender(){
 }
 async function archNames(){try{const j=await archCall("patients");$("archNames").innerHTML=j.patients.map(n=>`<option value="${esc(n)}"></option>`).join("");}catch(e){console.warn(e);}}
 async function archTplInfo(){try{const j=await archCall("template");ARCH.tplInfo=j.template;}catch(e){ARCH.tplInfo=null;}}
-function b64ToBytes(s){const bin=atob(s),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return u;}
+function b64ToBytes(s,tag){
+  if(typeof s!=="string"||!s)throw new Error("الخادم لم يُرجع بيانات للجزء "+(tag||"")+" — أعد المحاولة.");
+  let c=s.replace(/[^A-Za-z0-9+/=_-]/g,"").replace(/-/g,"+").replace(/_/g,"/").replace(/=+$/,"");   // ينظّف أي فراغات/أحرف زائدة وصيغة web-safe
+  if(c.length%4===1)throw new Error("بيانات الجزء "+(tag||"")+" ناقصة ("+s.length+" حرف) — أعد المحاولة.");
+  while(c.length%4)c+="=";
+  const bin=atob(c),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return u;}
 async function archUpload(blob,meta){
   const b=await archCall("begin",Object.assign({size:blob.size},meta));
   const CH=b.chunk||4*1024*1024,n=Math.max(1,Math.ceil(blob.size/CH));   // the server's part size (Drive needs 256 KB multiples)
@@ -855,7 +860,13 @@ async function archUpload(blob,meta){
 }
 async function archDownload(id){
   const inf=await archCall("info",{id}),parts=[];
-  for(let i=0;i<inf.chunks;i++){const j=await archCall("get",{id,i});parts.push(b64ToBytes(j.data));setBar("archBar",(i+1)/inf.chunks);}
+  const CH=4*1024*1024;
+  for(let i=0;i<inf.chunks;i++){const j=await archCall("get",{id,i});let b=b64ToBytes(j.data,(i+1)+"/"+inf.chunks);
+    const want=Math.min(CH,inf.size-i*CH);
+    if(inf.size&&b.length===inf.size&&inf.chunks>1)b=b.subarray(i*CH,i*CH+want);   // إذا Drive تجاهل Range ورجّع الملف كامل
+    else if(want>0&&b.length>want)b=b.subarray(0,want);
+    parts.push(b);setBar("archBar",(i+1)/inf.chunks);}
+  const tot=parts.reduce((a,b)=>a+b.length,0);if(inf.size&&tot!==inf.size)throw new Error("حجم الملف المنزَّل غير مطابق ("+tot+" من "+inf.size+") — أعد المحاولة.");
   setBar("archBar",null);return {name:inf.fileName,blob:new Blob(parts,{type:PPTX_MIME})};
 }
 async function archSaveLast(){
