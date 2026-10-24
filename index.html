@@ -2522,14 +2522,14 @@ async function openStickZoom(s){
   if(full&&full.close)full.close();
   const S={x1:a.stick.x1,y1:a.stick.y1,x2:a.stick.x2,y2:a.stick.y2,ey:a.stick.ey,eyeTilt:a.stick.eyeTilt||0};
   const ov=document.createElement("div");
-  ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;font-family:Tajawal,Tahoma,sans-serif";
-  ov.innerHTML=`<button class="btn sm" data-z="ok" type="button" title="إغلاق (يحفظ التعديلات)" style="position:absolute;top:10px;left:10px;z-index:3;font-size:20px;line-height:1;padding:6px 12px;background:#C00000;color:#fff;border-radius:50%">✕</button><div style="display:flex;gap:8px;align-items:center;padding:8px 12px;color:#fff;flex-wrap:wrap;background:#0a1014">
+  ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;overflow:hidden;width:100vw;height:100vh;box-sizing:border-box;font-family:Tajawal,Tahoma,sans-serif";
+  ov.innerHTML=`<button class="btn sm" data-z="ok" type="button" title="إغلاق (يحفظ التعديلات)" style="position:absolute;top:10px;left:10px;z-index:3;font-size:20px;line-height:1;padding:6px 12px;background:#C00000;color:#fff;border-radius:50%">✕</button><div style="display:flex;gap:6px 8px;align-items:center;padding:8px 12px 8px 64px;color:#fff;flex-wrap:wrap;background:#0a1014;min-width:0;max-width:100%;box-sizing:border-box;flex:none">
     <b style="font-size:18px">تكبير الفم — ضبط خط العود</b><span class="ang" style="background:#fff;color:#C00000;font-weight:700;padding:3px 10px;border-radius:6px;direction:ltr"></span>
-    <span style="opacity:.8;font-size:13px">اسحب الدائرة لتحريك طرف العود · اسحب الصورة للتنقل · عجلة الماوس للتكبير · الأسهم تحرك الطرف المختار بدقة</span>
+    <span style="opacity:.8;font-size:13px;flex:1 1 260px;min-width:0">اسحب الدائرة لتحريك طرف العود · اسحب الصورة للتنقل · عجلة الماوس للتكبير · الأسهم تحرك الطرف المختار بدقة</span>
     <span style="flex:1"></span>
     <button class="btn sm" data-z="in">＋ تكبير</button><button class="btn sm" data-z="out">－ تصغير</button>
     <button class="btn sm" data-z="ok" style="background:#1f8f4e;color:#fff">✓ اعتماد</button><button class="btn sm" data-z="no">إلغاء</button></div>
-    <canvas style="flex:1;width:100%;min-height:0;cursor:grab;touch-action:none"></canvas>`;
+    <canvas style="flex:1 1 0;width:100%;min-height:0;min-width:0;max-width:100%;display:block;cursor:grab;touch-action:none"></canvas>`;
   document.body.appendChild(ov);
   const cv=ov.querySelector("canvas"),g=cv.getContext("2d");
   let vw=0,vh=0,z=1,cx=(S.x1+S.x2)/2*BW,cy=(S.y1+S.y2)/2*BH,sel=2;
@@ -3052,15 +3052,15 @@ async function openOccZoom(s){
   const map=big._map,inv=invMap(map),keep=JSON.parse(JSON.stringify(p.occl));
   const S={};{const F=occPtsFrame(p,a,map);for(const k of OCC_KEYS)S[k]=F[k].slice();}
   const ov=document.createElement("div");
-  ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;font-family:Tajawal,Tahoma,sans-serif";
-  ov.innerHTML=`<button class="btn sm" data-z="ok" type="button" title="إغلاق (يحفظ التعديلات)" style="position:absolute;top:10px;left:10px;z-index:3;font-size:20px;line-height:1;padding:6px 12px;background:#C00000;color:#fff;border-radius:50%">✕</button><div style="display:flex;gap:8px;align-items:center;padding:8px 12px;color:#fff;flex-wrap:wrap;background:#0a1014">
+  ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;overflow:hidden;width:100vw;height:100vh;box-sizing:border-box;font-family:Tajawal,Tahoma,sans-serif";
+  ov.innerHTML=`<button class="btn sm" data-z="ok" type="button" title="إغلاق (يحفظ التعديلات)" style="position:absolute;top:10px;left:10px;z-index:3;font-size:20px;line-height:1;padding:6px 12px;background:#C00000;color:#fff;border-radius:50%">✕</button><div style="display:flex;gap:6px 8px;align-items:center;padding:8px 12px 8px 64px;color:#fff;flex-wrap:wrap;background:#0a1014;min-width:0;max-width:100%;box-sizing:border-box;flex:none">
     <b style="font-size:18px">تحليل الإطباق — Molar / Canine</b><span class="res" style="background:#fff;color:#000;font-weight:700;padding:3px 10px;border-radius:6px;direction:ltr"></span>
-    <span style="opacity:.85;font-size:13px">اسحب النقاط: <b style="color:#3CDC50">U3</b> قمة الناب العلوي · <b style="color:#E040E0">L3|L4</b> بين الناب والضاحك الأول السفلي · <b style="color:#FFD800">U6 MB</b> الحدبة الأمامية الخارجية للرحى العلوية · <b style="color:#20D0F0">L6 groove</b> الأخدود الخارجي للرحى السفلية · L5|L6 و L6 distal حدود الرحى السفلية (للمعايرة) · الأسهم تحرك النقطة المختارة</span>
+    <span style="opacity:.85;font-size:13px;flex:1 1 260px;min-width:0">اسحب النقاط: <b style="color:#3CDC50">U3</b> قمة الناب العلوي · <b style="color:#E040E0">L3|L4</b> بين الناب والضاحك الأول السفلي · <b style="color:#FFD800">U6 MB</b> الحدبة الأمامية الخارجية للرحى العلوية · <b style="color:#20D0F0">L6 groove</b> الأخدود الخارجي للرحى السفلية · L5|L6 و L6 distal حدود الرحى السفلية (للمعايرة) · الأسهم تحرك النقطة المختارة</span>
     <span style="flex:1"></span>
     <button class="btn sm" data-z="del" type="button" title="اضغط على أي خط لتحديده ثم احذفه (أو زر Delete)">🗑 حذف الخط المحدد</button><button class="btn sm" data-z="all" type="button" hidden>↩ إرجاع كل الخطوط</button><button class="btn sm" data-z="pc" type="button" title="حذف الناب كاملاً: نقطتيه وخطوطه والشريط الأحمر ونتيجته (مثلاً الناب غير بازغ أو غائب)">🗑 حذف الناب</button><button class="btn sm" data-z="pm" type="button" title="حذف الرحى كاملاً: نقطتيها وخطوطها والشريط الأحمر ونتيجتها">🗑 حذف الرحى</button>
     <button class="btn sm" data-z="in">＋ تكبير</button><button class="btn sm" data-z="out">－ تصغير</button>
     <button class="btn sm" data-z="ok" style="background:#1f8f4e;color:#fff">✓ اعتماد</button><button class="btn sm" data-z="no">إلغاء</button></div>
-    <canvas style="flex:1;width:100%;min-height:0;cursor:grab;touch-action:none"></canvas>`;
+    <canvas style="flex:1 1 0;width:100%;min-height:0;min-width:0;max-width:100%;display:block;cursor:grab;touch-action:none"></canvas>`;
   document.body.appendChild(ov);
   const cv=ov.querySelector("canvas"),g=cv.getContext("2d");
   let selLine=null,picked=false;
@@ -3176,12 +3176,12 @@ async function openZoomView(s,pic,title){
       guides=FY?FY.map(y=>(y-fr.top)/fr.h):(a.align&&a.align.guide?a.align.guide.slice():null);}catch(_){}
   }
   const ov=document.createElement("div");
-  ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;font-family:Tajawal,Tahoma,sans-serif";
-  ov.innerHTML=`<button class="btn sm" data-z="no" type="button" title="إغلاق" style="position:absolute;top:10px;left:10px;z-index:3;font-size:20px;line-height:1;padding:6px 12px;background:#C00000;color:#fff;border-radius:50%">✕</button><div style="display:flex;gap:8px;align-items:center;padding:8px 12px;color:#fff;flex-wrap:wrap;background:#0a1014">
-    <b style="font-size:18px">تكبير — ${esc(title||s.label)}</b><span style="opacity:.8;font-size:13px">اسحب الصورة للتنقل · عجلة الماوس أو ＋/－ للتكبير · Esc للإغلاق</span>
+  ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;overflow:hidden;width:100vw;height:100vh;box-sizing:border-box;font-family:Tajawal,Tahoma,sans-serif";
+  ov.innerHTML=`<button class="btn sm" data-z="no" type="button" title="إغلاق" style="position:absolute;top:10px;left:10px;z-index:3;font-size:20px;line-height:1;padding:6px 12px;background:#C00000;color:#fff;border-radius:50%">✕</button><div style="display:flex;gap:6px 8px;align-items:center;padding:8px 12px 8px 64px;color:#fff;flex-wrap:wrap;background:#0a1014;min-width:0;max-width:100%;box-sizing:border-box;flex:none">
+    <b style="font-size:18px">تكبير — ${esc(title||s.label)}</b><span style="opacity:.8;font-size:13px;flex:1 1 260px;min-width:0">اسحب الصورة للتنقل · عجلة الماوس أو ＋/－ للتكبير · Esc للإغلاق</span>
     <span style="flex:1"></span>${guides?`<label style="font-size:13px"><input type="checkbox" class="gl" checked> خطوط الشريحة</label>`:""}
     <button class="btn sm" data-z="in">＋ تكبير</button><button class="btn sm" data-z="out">－ تصغير</button><button class="btn sm" data-z="fit">ملء الشاشة</button><button class="btn sm" data-z="no">✕ إغلاق</button></div>
-    <canvas style="flex:1;width:100%;min-height:0;cursor:grab;touch-action:none"></canvas>`;
+    <canvas style="flex:1 1 0;width:100%;min-height:0;min-width:0;max-width:100%;display:block;cursor:grab;touch-action:none"></canvas>`;
   document.body.appendChild(ov);
   const cv=ov.querySelector("canvas"),g=cv.getContext("2d");
   let vw=0,vh=0,z=1,cx=BW/2,cy=BH/2;
@@ -3486,17 +3486,17 @@ async function openOJZoom(s){
   const map=big._map,inv=invMap(map),keep=JSON.parse(JSON.stringify(p.ojob));
   const S={};{const F=ojPtsFrame(p,a,map);for(const k of OJ_KEYS)S[k]=F[k].slice();}
   const ov=document.createElement("div");
-  ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;font-family:Tajawal,Tahoma,sans-serif";
-  ov.innerHTML=`<button class="btn sm" data-z="ok" type="button" title="إغلاق (يحفظ التعديلات)" style="position:absolute;top:10px;left:10px;z-index:3;font-size:20px;line-height:1;padding:6px 12px;background:#C00000;color:#fff;border-radius:50%">✕</button><div style="display:flex;gap:8px;align-items:center;padding:8px 12px;color:#fff;flex-wrap:wrap;background:#0a1014">
+  ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;overflow:hidden;width:100vw;height:100vh;box-sizing:border-box;font-family:Tajawal,Tahoma,sans-serif";
+  ov.innerHTML=`<button class="btn sm" data-z="ok" type="button" title="إغلاق (يحفظ التعديلات)" style="position:absolute;top:10px;left:10px;z-index:3;font-size:20px;line-height:1;padding:6px 12px;background:#C00000;color:#fff;border-radius:50%">✕</button><div style="display:flex;gap:6px 8px;align-items:center;padding:8px 12px 8px 64px;color:#fff;flex-wrap:wrap;background:#0a1014;min-width:0;max-width:100%;box-sizing:border-box;flex:none">
     <b style="font-size:18px">قياس ${kind==="oj"?"Overjet":"Overbite"}</b><span class="res" style="background:#fff;color:#000;font-weight:700;padding:3px 10px;border-radius:6px;direction:ltr"></span>
     <label style="font-size:13px">المسافة بين نقطتي المسطرة: <input class="mm" type="number" min="0.5" max="60" step="0.5" style="width:70px;direction:ltr"> ملم</label>
     <button class="btn sm" data-z="ruler" type="button" title="البحث عن علامات المسطرة بالصورة ووضع نقطتي المسطرة عليها">📐 كشف المسطرة</button><button class="btn sm" data-z="redo" type="button" title="يعيد القياس التلقائي لهذه الصورة بالقواعد الحالية (يستبدل النقاط)">🤖 أعد القياس</button>
     ${kind==="oj"?`<button class="btn sm" data-z="flip" type="button" title="إذا ظهر الـ Overjet بإشارة معكوسة">⇄ اتجاه الأمام</button>`:""}
-    <span style="opacity:.85;font-size:13px">اسحب: <b>ruler 1 / ruler 2</b> على علامتين بالمسطرة · <b style="color:#FFD800">U1 edge</b> ${kind==="oj"?"بداية المسطرة مع 31":"نهاية اللثة مع بداية السن 31 (الجهة الملاصقة للمسطرة)"} · <b style="color:#20D0F0">L1</b> ${kind==="oj"?"أعلى نقطة من 21 مع المسطرة":"الحافة العليا للسن 31"} · الأسهم تحرك النقطة المختارة</span>
+    <span style="opacity:.85;font-size:13px;flex:1 1 260px;min-width:0">اسحب: <b>ruler 1 / ruler 2</b> على علامتين بالمسطرة · <b style="color:#FFD800">U1 edge</b> ${kind==="oj"?"بداية المسطرة مع 31":"نهاية اللثة مع بداية السن 31 (الجهة الملاصقة للمسطرة)"} · <b style="color:#20D0F0">L1</b> ${kind==="oj"?"أعلى نقطة من 21 مع المسطرة":"الحافة العليا للسن 31"} · الأسهم تحرك النقطة المختارة</span>
     <span style="flex:1"></span>
     <button class="btn sm" data-z="in">＋ تكبير</button><button class="btn sm" data-z="out">－ تصغير</button>
     <button class="btn sm" data-z="ok" style="background:#1f8f4e;color:#fff">✓ اعتماد</button><button class="btn sm" data-z="no">إلغاء</button></div>
-    <canvas style="flex:1;width:100%;min-height:0;cursor:grab;touch-action:none"></canvas>`;
+    <canvas style="flex:1 1 0;width:100%;min-height:0;min-width:0;max-width:100%;display:block;cursor:grab;touch-action:none"></canvas>`;
   document.body.appendChild(ov);
   const cv=ov.querySelector("canvas"),g=cv.getContext("2d"),mmIn=ov.querySelector(".mm");mmIn.value=p.ojob.mm;
   const xs=OJ_KEYS.map(k=>S[k][0]*BW),ys=OJ_KEYS.map(k=>S[k][1]*BH);
