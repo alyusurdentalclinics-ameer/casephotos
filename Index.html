@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f4f6f9;--card:#fff;--ink:#1f2937;--mut:#6b7280;--line:#e5e7eb;--pri:#0f766e;--pri2:#115e59;--bad:#dc2626}
+*{box-sizing:border-box;font-family:'Inter',sans-serif}
+body{margin:0;background:var(--bg);color:var(--ink)}
+header{background:var(--pri);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+header h1{margin:0;font-size:20px}
+header .hb{display:flex;gap:8px;flex-wrap:wrap}
+header button,header a{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);text-decoration:none}
+header button:hover,header a:hover{background:rgba(255,255,255,.25)}
+.wrap{max-width:1350px;margin:auto;padding:16px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:14px}
+.stat{background:var(--card);border-radius:12px;padding:12px 14px;border:1px solid var(--line);cursor:pointer;transition:.15s}
+.stat:hover{border-color:var(--pri)}
+.stat b{display:block;font-size:26px}
+.stat span{color:var(--mut);font-size:13px}
+.stat small{display:block;color:var(--mut);font-size:12px;margin-top:4px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+input,select,textarea{padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;background:#fff;width:100%;color:var(--ink)}
+input:focus,select:focus,textarea:focus{outline:2px solid #99f6e4;border-color:var(--pri)}
+.bar input{flex:1;min-width:200px;width:auto}
+.bar select{width:auto}
+button,a.btnl{border:0;border-radius:8px;padding:9px 14px;cursor:pointer;font-size:14px;font-weight:500;display:inline-block}
+.btn{background:var(--pri);color:#fff}.btn:hover{background:var(--pri2)}
+.btn2{background:#fff;color:var(--ink);border:1px solid var(--line)}.btn2:hover{background:#f9fafb}
+.btnd{background:#fff;color:var(--bad);border:1px solid #fecaca}.btnd:hover{background:#fef2f2}
+.sm{padding:5px 9px;font-size:12px}
+.tbl{overflow:auto;border:1px solid var(--line);border-radius:12px;background:var(--card);max-height:calc(100vh - 290px)}
+table{width:100%;border-collapse:collapse}
+th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;font-size:14px}
+th{background:#f9fafb;color:var(--mut);font-weight:500;position:sticky;top:0;z-index:1}
+tr:hover td{background:#fafafa}
+.num{font-weight:700;letter-spacing:.5px;font-variant-numeric:tabular-nums}
+.badge{padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500}
+.s-available{background:#dcfce7;color:#166534}.s-issued{background:#dbeafe;color:#1e40af}
+.s-stopped{background:#fee2e2;color:#991b1b}.s-lost{background:#fef3c7;color:#92400e}
+.c-zain{color:#7e22ce}.c-asia{color:#dc2626}.c-korek{color:#0369a1}
+.pending{opacity:.45;pointer-events:none}
+.exp{color:var(--bad);font-weight:700}
+.acts{display:flex;gap:4px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;padding:12px;z-index:10}
+.modal.on{display:flex}
+.box{background:#fff;border-radius:14px;padding:18px;width:100%;max-width:580px;max-height:92vh;overflow:auto}
+.box.wide{max-width:900px}
+.box h3{margin:0 0 14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid .full{grid-column:1/-1}
+label{font-size:13px;color:var(--mut);display:block;margin-bottom:4px}
+.act{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.hint{font-size:12px;color:var(--mut);margin:6px 0}
+#toast{position:fixed;bottom:20px;right:20px;background:#111827;color:#fff;padding:10px 16px;border-radius:8px;display:none;z-index:30;max-width:90vw}
+#toast.err{background:var(--bad)}
+.empty{text-align:center;color:var(--mut);padding:30px}
+.loading{text-align:center;padding:40px;color:var(--mut)}
+@media(max-width:600px){.grid{grid-template-columns:1fr}header h1{font-size:17px}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📶 Prepaid SIM Inventory</h1>
+  <div class="hb">
+    <button onclick="openSim()">+ Add SIM</button>
+    <button onclick="openM('importModal')">Bulk Import</button>
+    <button onclick="openLog()">Activity Log</button>
+    <a id="sheetLink" class="btnl" href="#" target="_blank">Open Sheet</a>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="stats" id="stats"></div>
+
+  <div class="bar">
+    <input id="q" placeholder="Search by number, holder, department, ICCID..." oninput="render()">
+    <select id="fCarrier" onchange="render()">
+      <option value="">All carriers</option>
+      <option>Zain</option><option>Asiacell</option><option>Korek</option><option>Other</option>
+    </select>
+    <select id="fStatus" onchange="render()">
+      <option value="">All statuses</option>
+      <option value="available">Available</option>
+      <option value="issued">Issued</option>
+      <option value="stopped">Suspended</option>
+      <option value="lost">Lost</option>
+    </select>
+    <select id="fExp" onchange="render()">
+      <option value="">All expiry</option>
+      <option value="soon">Expiring in 30 days</option>
+      <option value="expired">Expired</option>
+    </select>
+  </div>
+
+  <div class="tbl">
+    <table>
+      <thead><tr>
+        <th>#</th><th>Number</th><th>Carrier</th><th>Plan</th><th>Balance</th><th>Status</th>
+        <th>Holder</th><th>Department</th><th>Issued On</th><th>Expiry</th><th>Notes</th><th>Actions</th>
+      </tr></thead>
+      <tbody id="tb"><tr><td colspan="12" class="loading">Loading...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add / Edit -->
+<div class="modal" id="simModal"><div class="box">
+  <h3 id="simTitle">Add SIM</h3>
+  <form id="simForm" onsubmit="saveSim(event)">
+    <input type="hidden" id="f_id">
+    <div class="grid">
+      <div><label>SIM Number *</label><input id="f_number" class="num" inputmode="numeric" placeholder="07XXXXXXXXX" required></div>
+      <div><label>Carrier</label>
+        <select id="f_carrier"><option>Zain</option><option>Asiacell</option><option>Korek</option><option>Other</option></select></div>
+      <div><label>Serial (ICCID)</label><input id="f_iccid" class="num" inputmode="numeric"></div>
+      <div><label>Plan</label><input id="f_plan" placeholder="e.g. 25K bundle"></div>
+      <div><label>Balance</label><input id="f_balance" inputmode="numeric"></div>
+      <div><label>Status</label>
+        <select id="f_status"><option value="available">Available</option><option value="issued">Issued</option><option value="stopped">Suspended</option><option value="lost">Lost</option></select></div>
+      <div><label>Holder</label><input id="f_holder"></div>
+      <div><label>Department</label><input id="f_department" list="deptList"></div>
+      <div><label>Received Date</label><input id="f_receivedDate" type="date"></div>
+      <div><label>Issued Date</label><input id="f_issuedDate" type="date"></div>
+      <div><label>Expiry Date</label><input id="f_expiryDate" type="date"></div>
+      <div class="full"><label>Notes</label><textarea id="f_notes" rows="2"></textarea></div>
+    </div>
+    <div class="act">
+      <button type="button" class="btn2" onclick="closeM('simModal')">Cancel</button>
+      <button class="btn">Save</button>
+    </div>
+  </form>
+</div></div>
+
+<!-- Issue -->
+<div class="modal" id="issueModal"><div class="box">
+  <h3>Issue SIM <span id="issueNum" class="num"></span></h3>
+  <form onsubmit="doIssue(event)">
+    <input type="hidden" id="i_id">
+    <div class="grid">
+      <div><label>Holder Name *</label><input id="i_holder" required></div>
+      <div><label>Department</label><input id="i_department" list="deptList"></div>
+      <div><label>Issue Date</label><input id="i_date" type="date"></div>
+      <div><label>Note</label><input id="i_note"></div>
+    </div>
+    <div class="act">
+      <button type="button" class="btn2" onclick="closeM('issueModal')">Cancel</button>
+      <button class="btn">Issue</button>
+    </div>
+  </form>
+</div></div>
+
+<!-- Import -->
+<div class="modal" id="importModal"><div class="box">
+  <h3>Bulk Import SIMs</h3>
+  <p class="hint">Paste from Excel, one SIM per line, in this order: <b>Number, Carrier, Plan, Balance, ICCID, Expiry (YYYY-MM-DD)</b> — separated by Tab or comma. Columns after the number are optional.</p>
+  <div class="grid">
+    <div><label>Default carrier</label>
+      <select id="imp_carrier"><option>Zain</option><option>Asiacell</option><option>Korek</option><option>Other</option></select></div>
+    <div><label>Received date</label><input id="imp_date" type="date"></div>
+    <div class="full"><textarea id="imp_text" rows="10" class="num" placeholder="07801234567	Zain	25K bundle	5000"></textarea></div>
+  </div>
+  <div class="act">
+    <button type="button" class="btn2" onclick="closeM('importModal')">Cancel</button>
+    <button class="btn" onclick="doImport()">Import</button>
+  </div>
+</div></div>
+
+<!-- Log -->
+<div class="modal" id="logModal"><div class="box wide">
+  <h3 id="logTitle">Activity Log</h3>
+  <div class="tbl" style="max-height:60vh">
+    <table><thead><tr><th>Time</th><th>Number</th><th>Action</th><th>Holder</th><th>User</th><th>Details</th></tr></thead>
+    <tbody id="logBody"></tbody></table>
+  </div>
+  <div class="act"><button class="btn2" onclick="closeM('logModal')">Close</button></div>
+</div></div>
+
+<datalist id="deptList"></datalist>
+<div id="toast"></div>
+
+<script>
+let SIMS = [];
+const ST = {available:['Available','s-available'],issued:['Issued','s-issued'],stopped:['Suspended','s-stopped'],lost:['Lost','s-lost']};
+const CARRIERS = ['Zain','Asiacell','Korek'];
+const CC = {'Zain':'c-zain','Asiacell':'c-asia','Korek':'c-korek'};
+const FIELDS = ['id','number','carrier','iccid','plan','balance','status','holder','department','receivedDate','issuedDate','expiryDate','notes'];
+
+const $ = id => document.getElementById(id);
+const run = (fn, ...a) => new Promise((res, rej) =>
+  google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn](...a));
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const normNum = n => String(n || '').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\D/g, '');
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+const daysTo = s => s ? Math.ceil((new Date(s) - new Date(today())) / 864e5) : null;
+const clean = o => { const c = {}; FIELDS.forEach(k => c[k] = o[k] ?? ''); return c; };
+
+function toast(msg, err) {
+  const t = $('toast'); t.textContent = msg; t.className = err ? 'err' : ''; t.style.display = 'block';
+  clearTimeout(t._t); t._t = setTimeout(() => t.style.display = 'none', err ? 5000 : 2500);
+}
+function openM(id) { $(id).classList.add('on'); if (id === 'importModal' && !$('imp_date').value) $('imp_date').value = today(); }
+function closeM(id) { $(id).classList.remove('on'); }
+document.querySelectorAll('.modal').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('on'); }));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.modal.on').forEach(m => m.classList.remove('on')); });
+
+/* ========== Generic optimistic update ========== */
+async function optimistic(mutate, call, okMsg) {
+  const backup = JSON.parse(JSON.stringify(SIMS));
+  mutate(); render();
+  try {
+    const r = await call();
+    if (r && r.id) { const i = SIMS.findIndex(s => s.id === r.id); if (i > -1) SIMS[i] = r; }
+    render(); if (okMsg) toast(okMsg);
+    return r;
+  } catch (e) {
+    SIMS = backup; render(); toast('Error: ' + (e.message || e), true);
+  }
+}
+
+/* ========== Load ========== */
+function load() {
+  run('getInit').then(r => {
+    SIMS = r.sims; $('sheetLink').href = r.url; render();
+  }).catch(e => { $('tb').innerHTML = `<tr><td colspan="12" class="empty">Failed to load: ${esc(e.message)}</td></tr>`; });
+}
+
+/* ========== Render ========== */
+function render() {
+  const q = $('q').value.trim().toLowerCase();
+  const qn = normNum($('q').value);
+  const fc = $('fCarrier').value, fs = $('fStatus').value, fe = $('fExp').value;
+
+  const list = SIMS.filter(s => {
+    if (fc && s.carrier !== fc) return false;
+    if (fs && s.status !== fs) return false;
+    if (fe) { const d = daysTo(s.expiryDate); if (d === null) return false;
+      if (fe === 'soon' && !(d >= 0 && d <= 30)) return false;
+      if (fe === 'expired' && d >= 0) return false; }
+    if (q) {
+      const hay = [s.holder, s.department, s.plan, s.notes, s.carrier].join(' ').toLowerCase();
+      const numHit = qn && (s.number.includes(qn) || (s.iccid || '').includes(qn));
+      if (!numHit && !hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  $('tb').innerHTML = list.length ? list.map((s, i) => {
+    const st = ST[s.status] || ['—', ''];
+    const d = daysTo(s.expiryDate);
+    const expCls = d !== null && d <= 30 ? 'exp' : '';
+    const expTxt = s.expiryDate ? s.expiryDate + (d !== null && d < 0 ? ' (expired)' : d !== null && d <= 30 ? ` (${d} days)` : '') : '';
+    const btns = s.status === 'available'
+      ? `<button class="btn sm" onclick="openIssue('${s.id}')">Issue</button>`
+      : s.status === 'issued' ? `<button class="btn2 sm" onclick="doReturn('${s.id}')">Return</button>` : '';
+    return `<tr class="${s._p ? 'pending' : ''}">
+      <td>${i + 1}</td>
+      <td class="num">${esc(s.number)}</td>
+      <td class="${CC[s.carrier] || ''}"><b>${esc(s.carrier)}</b></td>
+      <td>${esc(s.plan)}</td>
+      <td>${esc(s.balance)}</td>
+      <td><span class="badge ${st[1]}">${st[0]}</span></td>
+      <td>${esc(s.holder)}</td>
+      <td>${esc(s.department)}</td>
+      <td>${esc(s.issuedDate)}</td>
+      <td class="${expCls}">${esc(expTxt)}</td>
+      <td title="${esc(s.notes)}">${esc((s.notes || '').slice(0, 25))}</td>
+      <td><div class="acts">${btns}
+        <button class="btn2 sm" onclick="openSim('${s.id}')">Edit</button>
+        <button class="btn2 sm" onclick="openLog('${s.id}')">Log</button>
+        <button class="btnd sm" onclick="doDelete('${s.id}')">Delete</button>
+      </div></td></tr>`;
+  }).join('') : `<tr><td colspan="12" class="empty">No matching SIMs</td></tr>`;
+
+  renderStats();
+  $('deptList').innerHTML = [...new Set(SIMS.map(s => s.department).filter(Boolean))].map(d => `<option value="${esc(d)}">`).join('');
+}
+
+function renderStats() {
+  const c = k => SIMS.filter(s => s.status === k).length;
+  const soon = SIMS.filter(s => { const d = daysTo(s.expiryDate); return d !== null && d <= 30; }).length;
+  const byCar = CARRIERS.map(n => {
+    const all = SIMS.filter(s => s.carrier === n);
+    return { n, total: all.length, av: all.filter(s => s.status === 'available').length };
+  });
+  $('stats').innerHTML = `
+    <div class="stat" onclick="setF('','','')"><b>${SIMS.length}</b><span>Total SIMs</span></div>
+    <div class="stat" onclick="setF('','available','')"><b style="color:#16a34a">${c('available')}</b><span>In stock</span></div>
+    <div class="stat" onclick="setF('','issued','')"><b style="color:#2563eb">${c('issued')}</b><span>Issued</span></div>
+    <div class="stat" onclick="setF('','stopped','')"><b style="color:#dc2626">${c('stopped') + c('lost')}</b><span>Suspended / Lost</span></div>
+    <div class="stat" onclick="setF('','','soon')"><b style="color:#d97706">${soon}</b><span>Expiring / Expired</span></div>
+    ${byCar.map(x => `<div class="stat" onclick="setF('${x.n}','','')"><b class="${CC[x.n]}">${x.av}</b><span>${x.n} available</span><small>of ${x.total} total</small></div>`).join('')}`;
+}
+function setF(c, s, e) { $('fCarrier').value = c; $('fStatus').value = s; $('fExp').value = e === 'soon' ? 'soon' : ''; render(); }
+
+/* ========== Add / Edit ========== */
+function openSim(id) {
+  const s = id ? SIMS.find(x => x.id === id) : { carrier: 'Zain', status: 'available', receivedDate: today() };
+  FIELDS.forEach(k => { const el = $('f_' + k); if (el) el.value = s[k] || (k === 'carrier' ? 'Zain' : k === 'status' ? 'available' : ''); });
+  $('simTitle').textContent = id ? 'Edit SIM' : 'Add SIM';
+  openM('simModal'); setTimeout(() => $('f_number').focus(), 50);
+}
+
+function saveSim(e) {
+  e.preventDefault();
+  const o = {}; FIELDS.forEach(k => { const el = $('f_' + k); o[k] = el ? el.value.trim() : ''; });
+  o.number = normNum(o.number); o.iccid = normNum(o.iccid);
+  if (!o.number) return toast('Enter the SIM number', true);
+  if (SIMS.some(s => s.number === o.number && s.id !== o.id)) return toast('This number already exists', true);
+  if (o.status === 'issued' && !o.holder) return toast('Enter the holder name', true);
+  const isNew = !o.id; if (isNew) o.id = uid();
+  closeM('simModal');
+  optimistic(() => {
+    if (isNew) SIMS.unshift({ ...o, _p: 1 });
+    else { const i = SIMS.findIndex(s => s.id === o.id); SIMS[i] = { ...SIMS[i], ...o, _p: 1 }; }
+  }, () => run('saveSim', clean(o)), isNew ? 'SIM added' : 'Saved');
+}
+
+/* ========== Issue / Return / Delete ========== */
+function openIssue(id) {
+  const s = SIMS.find(x => x.id === id);
+  $('i_id').value = id; $('issueNum').textContent = s.number;
+  $('i_holder').value = ''; $('i_department').value = ''; $('i_note').value = ''; $('i_date').value = today();
+  openM('issueModal'); setTimeout(() => $('i_holder').focus(), 50);
+}
+function doIssue(e) {
+  e.preventDefault();
+  const id = $('i_id').value, holder = $('i_holder').value.trim(), dept = $('i_department').value.trim(),
+        date = $('i_date').value || today(), note = $('i_note').value.trim();
+  if (!holder) return toast('Enter the holder name', true);
+  closeM('issueModal');
+  optimistic(() => {
+    const s = SIMS.find(x => x.id === id);
+    Object.assign(s, { status: 'issued', holder, department: dept, issuedDate: date, _p: 1 });
+  }, () => run('issueSim', id, holder, dept, date, note), 'SIM issued');
+}
+function doReturn(id) {
+  const s = SIMS.find(x => x.id === id);
+  if (!confirm(`Return SIM ${s.number} from ${s.holder} to stock?`)) return;
+  optimistic(() => Object.assign(s, { status: 'available', holder: '', department: '', issuedDate: '', _p: 1 }),
+    () => run('returnSim', id, ''), 'SIM returned');
+}
+function doDelete(id) {
+  const s = SIMS.find(x => x.id === id);
+  if (!confirm(`Permanently delete SIM ${s.number}?`)) return;
+  optimistic(() => { SIMS = SIMS.filter(x => x.id !== id); }, () => run('deleteSim', id).then(() => null), 'SIM deleted');
+}
+
+/* ========== Import ========== */
+function doImport() {
+  const defCar = $('imp_carrier').value, rDate = $('imp_date').value || today();
+  const seen = new Set(SIMS.map(s => s.number));
+  const arr = []; let dup = 0;
+  $('imp_text').value.split(/\r?\n/).forEach(line => {
+    if (!line.trim()) return;
+    const p = line.split(/\t|,|;/).map(x => x.trim());
+    const number = normNum(p[0]);
+    if (!number) return;
+    if (seen.has(number)) { dup++; return; }
+    seen.add(number);
+    arr.push({ id: uid(), number, carrier: p[1] || defCar, plan: p[2] || '', balance: p[3] || '',
+      iccid: normNum(p[4]), expiryDate: p[5] || '', status: 'available', receivedDate: rDate,
+      holder: '', department: '', issuedDate: '', notes: '' });
+  });
+  if (!arr.length) return toast(dup ? 'All numbers already exist' : 'No valid numbers found', true);
+  closeM('importModal'); $('imp_text').value = '';
+  const backup = JSON.parse(JSON.stringify(SIMS));
+  SIMS = arr.map(o => ({ ...o, _p: 1 })).concat(SIMS); render();
+  run('bulkAdd', arr).then(r => {
+    const map = {}; r.added.forEach(o => map[o.id] = o);
+    SIMS = SIMS.filter(s => !s._p || map[s.id]).map(s => map[s.id] || s);
+    render();
+    const sk = r.skipped.length + dup;
+    toast(`${r.added.length} SIMs added` + (sk ? ` — ${sk} duplicates skipped` : ''));
+  }).catch(e => { SIMS = backup; render(); toast('Error: ' + e.message, true); });
+}
+
+/* ========== Log ========== */
+function openLog(simId) {
+  const s = simId ? SIMS.find(x => x.id === simId) : null;
+  $('logTitle').innerHTML = s ? `Log for SIM <span class="num">${esc(s.number)}</span>` : 'Activity Log (last 300)';
+  $('logBody').innerHTML = '<tr><td colspan="6" class="loading">Loading...</td></tr>';
+  openM('logModal');
+  run('getLog', simId || '').then(rows => {
+    $('logBody').innerHTML = rows.length ? rows.map(r => `<tr><td>${esc(r.time)}</td><td class="num">${esc(r.number)}</td>
+      <td><b>${esc(r.action)}</b></td><td>${esc(r.holder)}</td><td>${esc(r.user)}</td><td>${esc(r.details)}</td></tr>`).join('')
+      : '<tr><td colspan="6" class="empty">No activity</td></tr>';
+  }).catch(e => $('logBody').innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`);
+}
+
+load();
+</script>
+</body>
+</html>
