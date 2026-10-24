@@ -3252,7 +3252,7 @@ async function openZoomView(s,pic,title){
    >6 large, >9 very large, <0 reverse; overbite normal 1-3.5 mm (about a third of the lower crown), >3.5
    increased, >5 deep bite, <0 open bite. */
 const OJ_KEYS=["r1","r2","u","l"];
-const OJ_VER=14;   // point rules version: older points (even hand-moved ones) are measured again with the current rules
+const OJ_VER=15;   // point rules version: older points (even hand-moved ones) are measured again with the current rules
 const OJ_INFO={r1:{c:"#FFFFFF",t:"ruler"},r2:{c:"#FFFFFF",t:"ruler"},u:{c:"#FFD800",t:"U1 edge"},l:{c:"#20D0F0",t:"L1"}};
 const isOJSlot=s=>!!s&&s.k===16&&!s.video&&/^io_over(jet|bite)$/.test(s.cat||"");
 const ojKind=s=>s.cat==="io_overbite"?"ob":"oj";
@@ -3262,13 +3262,16 @@ function ojResult(p,a,kind){
   const q=k=>{const t=rawToTurned(p,rot,flip,O.pts[k][0],O.pts[k][1]);return [t[0]*W,t[1]*H];};
   const R1=q("r1"),R2=q("r2"),U=q("u"),L=q("l");let ax=R2[0]-R1[0],ay=R2[1]-R1[1];const len=Math.hypot(ax,ay);if(len<3||!(O.mm>0))return null;ax/=len;ay/=len;
   const mmpx=O.mm/len;
-  if(kind==="ob"){if(ay<0){ax=-ax;ay=-ay;}   // along the ruler, pointing down
-    return {v:((U[0]-L[0])*ax+(U[1]-L[1])*ay)*mmpx,mmpx};}
+  if(kind==="ob"){   // straight up-down in the picture (not along the slant of the ruler); the ruler gives the scale
+    if(O.v>=15)return {v:(U[1]-L[1])*mmpx,mmpx};
+    if(ay<0){ax=-ax;ay=-ay;}return {v:((U[0]-L[0])*ax+(U[1]-L[1])*ay)*mmpx,mmpx};}
   // front direction (where the incisors point): from the AI / the user, turned like the photo
   const fr=O.front||1,f0=rawToTurned(p,rot,flip,.5,.5),f1=rawToTurned(p,rot,flip,.5+.1*fr,.5);let fx=(f1[0]-f0[0])*W,fy=(f1[1]-f0[1])*H;
   let s=Math.sign(ax*fx+ay*fy)||1;
   // v3+ points: u = start of the ruler at the lower incisor (31), l = edge of the upper incisor (21) at the ruler
   //   → overjet = how far 11 lies in front of the ruler start; older points: u = upper edge, l = lower incisor
+  // v15+: U1 edge = highest point of 21 with the ruler, L1 = start of the ruler at 31 (names as the clinic uses them)
+  if(O.v>=15)return {v:((U[0]-L[0])*ax+(U[1]-L[1])*ay)*s*mmpx,mmpx};
   if(O.v>=3)return {v:((L[0]-U[0])*ax+(L[1]-U[1])*ay)*s*mmpx,mmpx};
   return {v:((U[0]-L[0])*ax+(U[1]-L[1])*ay)*s*mmpx,mmpx};
 }
@@ -3302,13 +3305,18 @@ function ojRulerGeom(F){let ax=F.r2[0]-F.r1[0],ay=F.r2[1]-F.r1[1];const len=Math
   return {e1:[F.r1[0]+nx*h,F.r1[1]+ny*h],e2:[F.r2[0]+nx*h,F.r2[1]+ny*h]};}
 function drawOJ(g,F,kind,opt){
   opt=opt||{};const lw=opt.lw||2,r=opt.r||6;g.save();g.lineCap="round";
-  let ax=F.r2[0]-F.r1[0],ay=F.r2[1]-F.r1[1];const len=Math.hypot(ax,ay)||1;ax/=len;ay/=len;const nx=-ay,ny=ax;
+  let ax=F.r2[0]-F.r1[0],ay=F.r2[1]-F.r1[1];const len=Math.hypot(ax,ay)||1;ax/=len;ay/=len;
+  if(kind==="ob"){ax=0;ay=1;}   // overbite: U1-L1 is read straight up-down, whatever the slant of the ruler
+  const nx=-ay,ny=ax;
+  // the ruler marks are for measuring only: drawn in the zoom, not on the photo / slide
+  if(opt.ruler!==false){
   g.strokeStyle="rgba(255,255,255,.95)";g.lineWidth=lw;g.setLineDash([6,4]);g.beginPath();g.moveTo(...F.r1);g.lineTo(...F.r2);g.stroke();g.setLineDash([]);
   // each ruler mark: a line square to the ruler (to lay it exactly on the graduation), joined by a red bar = the known mm
   {const R=ojRulerGeom(F);g.strokeStyle="#FF9F1A";g.lineWidth=lw;for(const [a0,b0] of [[F.r1,R.e1],[F.r2,R.e2]]){g.beginPath();g.moveTo(...a0);g.lineTo(...b0);g.stroke();}
    g.strokeStyle="#FF2A2A";g.lineWidth=lw*1.6;g.beginPath();g.moveTo(...R.e1);g.lineTo(...R.e2);g.stroke();
    if(opt.mm){const fs=opt.fs||12;g.font=`bold ${fs}px sans-serif`;g.textAlign="center";g.textBaseline="top";g.direction="ltr";const t=opt.mm+" mm",mx0=(R.e1[0]+R.e2[0])/2,my0=(R.e1[1]+R.e2[1])/2+4;
      g.lineWidth=3;g.strokeStyle="rgba(0,0,0,.6)";g.strokeText(t,mx0,my0);g.fillStyle="#fff";g.fillText(t,mx0,my0);g.textAlign="left";}}
+  }
   // the projections of the two incisor points on a line parallel to the ruler, through the middle of the two points
   const mx=(F.u[0]+F.l[0])/2,my=(F.u[1]+F.l[1])/2,pr=P=>{const t=(P[0]-mx)*ax+(P[1]-my)*ay;return [mx+ax*t,my+ay*t];};
   const pu=pr(F.u),pl=pr(F.l);
@@ -3316,7 +3324,7 @@ function drawOJ(g,F,kind,opt){
   g.strokeStyle="rgba(32,208,240,.9)";g.beginPath();g.moveTo(...F.l);g.lineTo(...pl);g.stroke();
   g.strokeStyle="#FF2A2A";g.lineWidth=lw*1.8;g.beginPath();g.moveTo(...pu);g.lineTo(...pl);g.stroke();
   for(const P of [pu,pl]){g.lineWidth=lw;g.beginPath();g.moveTo(P[0]+nx*8,P[1]+ny*8);g.lineTo(P[0]-nx*8,P[1]-ny*8);g.stroke();}
-  if(opt.handles!==false)for(const k of OJ_KEYS){const q=F[k];g.beginPath();g.arc(q[0],q[1],r,0,2*Math.PI);g.fillStyle=opt.sel===k?"rgba(255,216,0,.75)":"rgba(255,255,255,.35)";g.fill();g.lineWidth=2;g.strokeStyle=k.startsWith("r")?"#C00000":OJ_INFO[k].c;g.stroke();
+  if(opt.handles!==false)for(const k of OJ_KEYS){if(opt.ruler===false&&k.startsWith("r"))continue;const q=F[k];g.beginPath();g.arc(q[0],q[1],r,0,2*Math.PI);g.fillStyle=opt.sel===k?"rgba(255,216,0,.75)":"rgba(255,255,255,.35)";g.fill();g.lineWidth=2;g.strokeStyle=k.startsWith("r")?"#C00000":OJ_INFO[k].c;g.stroke();
     if(opt.labels){const fs=opt.fs||12;g.font=`bold ${fs}px sans-serif`;g.textBaseline="middle";g.lineWidth=3;g.strokeStyle="rgba(0,0,0,.55)";const t=k.startsWith("r")?"ruler "+k[1]:OJ_INFO[k].t;g.strokeText(t,q[0]+r+5,q[1]-r-fs*.5);g.fillStyle=k.startsWith("r")?"#fff":OJ_INFO[k].c;g.fillText(t,q[0]+r+5,q[1]-r-fs*.5);}}
   g.restore();
 }
@@ -3497,6 +3505,7 @@ async function aiOverjet(p,kind,signal){
       try{let full=null;try{full=await createImageBitmap(p.file,{imageOrientation:"from-image"});}catch(_){}
         const T=detectOBTooth(full||p.prev,{r1:p.ojob.pts.r1,r2:p.ojob.pts.r2,mm:p.ojob.mm});if(full&&full.close)full.close();
         if(T){p.ojob.pts.u=T.u;p.ojob.pts.l=T.l;p.ojob.toothAuto=true;}}catch(e){console.warn(e);}}
+    if(kind==="oj"){const t0=p.ojob.pts.u;p.ojob.pts.u=p.ojob.pts.l;p.ojob.pts.l=t0;}   // U1 edge = 21, L1 = ruler start at 31
     p.ojob.v=OJ_VER;
     return true;
   }catch(e){if(!(e&&e.code==="cancelled"))p.ojFail="خطأ بالاتصال بالذكاء الاصطناعي: "+(typeof aiErrorText==="function"?aiErrorText(e):String(e&&e.message||e));throw e;}
@@ -3539,7 +3548,7 @@ async function openOJZoom(s){
   const a=assign[s.id],p=a&&photos.find(x=>x.id===a.photoId);if(!a||!p)return;const kind=ojKind(s);
   const freshOJ=!p.ojob||!p.ojob.pts;
   if(!p.ojob||!p.ojob.pts){const T=(u,v)=>turnedToRaw(p,a.rot,a.flip,u,v);
-    p.ojob={pts:kind==="oj"?{r1:T(.35,.62),r2:T(.65,.62),u:T(.45,.6),l:T(.52,.6)}:{r1:T(.6,.3),r2:T(.6,.7),u:T(.5,.5),l:T(.5,.45)},mm:5,front:-1,man:false,v:0};}
+    p.ojob={pts:kind==="oj"?{r1:T(.35,.62),r2:T(.65,.62),u:T(.52,.6),l:T(.45,.6)}:{r1:T(.6,.3),r2:T(.6,.7),u:T(.5,.5),l:T(.5,.45)},mm:5,front:-1,man:false,v:0};}
   if(freshOJ){try{const R=await snapRuler(p,null);if(R){p.ojob.pts.r1=R.r1;p.ojob.pts.r2=R.r2;p.ojob.mm=R.mm;p.ojob.rulerAuto=true;}}catch(e){console.warn(e);}}
   const fr=frameRect(s),ar=fr.w/fr.h,BW=3000,BH=Math.round(BW/ar);
   let full=null;try{full=await createImageBitmap(p.file,{imageOrientation:"from-image"});}catch(_){}
@@ -3554,7 +3563,7 @@ async function openOJZoom(s){
     <label style="font-size:13px">المسافة بين نقطتي المسطرة: <input class="mm" type="number" min="0.5" max="60" step="0.5" style="width:70px;direction:ltr"> ملم</label>
     <button class="btn sm" data-z="ruler" type="button" title="البحث عن علامات المسطرة بالصورة ووضع نقطتي المسطرة عليها">📐 كشف المسطرة</button><button class="btn sm" data-z="redo" type="button" title="يعيد القياس التلقائي لهذه الصورة بالقواعد الحالية (يستبدل النقاط)">🤖 أعد القياس</button>
     ${kind==="oj"?`<button class="btn sm" data-z="flip" type="button" title="إذا ظهر الـ Overjet بإشارة معكوسة">⇄ اتجاه الأمام</button>`:""}
-    <span style="opacity:.85;font-size:13px;flex:1 1 260px;min-width:0">اسحب: <b>ruler 1 / ruler 2</b> على علامتين بالمسطرة · <b style="color:#FFD800">U1 edge</b> ${kind==="oj"?"بداية المسطرة مع 31":"نهاية اللثة مع بداية السن 31 (الجهة الملاصقة للمسطرة)"} · <b style="color:#20D0F0">L1</b> ${kind==="oj"?"أعلى نقطة من 21 مع المسطرة":"الحافة العليا للسن 31"} · الأسهم تحرك النقطة المختارة</span>
+    <span style="opacity:.85;font-size:13px;flex:1 1 260px;min-width:0">اسحب: <b>ruler 1 / ruler 2</b> على علامتين بالمسطرة · <b style="color:#FFD800">U1 edge</b> ${kind==="oj"?"أعلى نقطة من 21 مع المسطرة":"نهاية اللثة مع بداية السن 31 (الجهة الملاصقة للمسطرة)"} · <b style="color:#20D0F0">L1</b> ${kind==="oj"?"بداية المسطرة مع 31":"الحافة العليا للسن 31"} · الأسهم تحرك النقطة المختارة</span>
     <span style="flex:1"></span>
     <button class="btn sm" data-z="in">＋ تكبير</button><button class="btn sm" data-z="out">－ تصغير</button>
     <button class="btn sm" data-z="ok" style="background:#1f8f4e;color:#fff">✓ اعتماد</button><button class="btn sm" data-z="no">إلغاء</button></div>
@@ -4379,7 +4388,7 @@ function drawSlidePreview(sec,list,bigW){
           g.save();g.strokeStyle="#FFD800";g.lineWidth=3;g.beginPath();g.moveTo(0,ym*k);g.lineTo(W,ym*k);g.stroke();g.restore();
           g.fillStyle="#C00000";g.font="bold 20px sans-serif";g.fillText("Canting: "+Math.abs(a.stick.tilt-(a.stick.eyeTilt||0)).toFixed(1)+"\u00B0",(f.left+f.w)*k+12,(Math.max(T.y1,T.y2)+400000)*k);}
         g.restore();fitted=true;}
-      if(isOJSlot(s)&&img._map){const st=ojStatus(s);if(st.ok){const Fr=ojPtsFrame(p,a,img._map);if(Fr){const F={};for(const k of OJ_KEYS)F[k]=[left+Fr[k][0]*dw,top+Fr[k][1]*dh];drawOJ(g,F,ojKind(s),{lw:2,handles:false});}
+      if(isOJSlot(s)&&img._map){const st=ojStatus(s);if(st.ok){const Fr=ojPtsFrame(p,a,img._map);if(Fr){const F={};for(const k of OJ_KEYS)F[k]=[left+Fr[k][0]*dw,top+Fr[k][1]*dh];drawOJ(g,F,ojKind(s),{lw:2,ruler:false,handles:false});}
         g.save();g.font="bold 16px sans-serif";g.textAlign="center";g.direction="ltr";g.textBaseline="top";g.fillStyle=st.g.k==="ok"?"#1E8C2E":st.g.k==="warn"?"#B8860B":"#C00000";g.fillText(st.g.t.replace(/^(Overjet|Overbite)\s*/,m=>m.trim()+": "),left+dw/2,top+dh+6);g.restore();}}
       if(isOccSlot(s)&&p.occl&&p.occl.pts&&!p.occl.hide&&img._map){const Fr=occPtsFrame(p,a,img._map);if(Fr){const F={};for(const kk of OCC_KEYS)F[kk]=[left+Fr[kk][0]*dw,top+Fr[kk][1]*dh];if(!p.occl.noLines)drawOcc(g,F,{lw:2,handles:false,off:occOff(p)});drawOccText(g,p,left+6,top+dh-44,14,a);}}
       if(a.align&&a.align.guide&&!fitted)hasGuide=true;
@@ -4761,7 +4770,7 @@ function renderSlidesInner(){
       if(p&&isOJSlot(s)){const cv=el.querySelector("canvas"),st=ojStatus(s);
         if(cv){const g=cv.getContext("2d");
           if(!st.ok)drawMsg(g,st.msg,6,6,12,st.busy?"#1E5FA8":"#B00000");
-          else if(cv._map){const Fr=ojPtsFrame(p,a,cv._map);if(Fr){const F={};for(const k of OJ_KEYS)F[k]=[Fr[k][0]*cv.width,Fr[k][1]*cv.height];drawOJ(g,F,ojKind(s),{lw:2,r:4});}
+          else if(cv._map){const Fr=ojPtsFrame(p,a,cv._map);if(Fr){const F={};for(const k of OJ_KEYS)F[k]=[Fr[k][0]*cv.width,Fr[k][1]*cv.height];drawOJ(g,F,ojKind(s),{lw:2,r:4,ruler:false});}
             g.save();g.font="bold 14px sans-serif";g.textBaseline="top";const t=st.g.t+(p.ojob.man?"  ✓":""),w=g.measureText(t).width+12;g.fillStyle="rgba(255,255,255,.9)";g.fillRect(6,6,w,22);
             g.fillStyle=st.g.k==="ok"?"#1E8C2E":st.g.k==="warn"?"#B8860B":"#C00000";g.fillText(t,12,10);g.restore();}}}
       if(p&&isOccSlot(s)){const st=occStatus(s);if(!st.ok){const cv=el.querySelector("canvas");if(cv)drawMsg(cv.getContext("2d"),st.msg,6,6,12,st.busy?"#1E5FA8":"#B00000");}}
