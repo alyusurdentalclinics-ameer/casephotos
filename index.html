@@ -1918,7 +1918,7 @@ function autoAssign(){
       sc+=Math.min((p.w||0)*(p.h||0),2e7)/2e9;
       if(sc>bs){bs=sc;best=p;}
     }
-    if(best){if(cur&&cur.photoId===best.id){cur.approx=best.cat!==s.cat;assign[s.id]=cur;}else assign[s.id]={photoId:best.id,rot:best.rot||0,flip:false,approx:best.cat!==s.cat,manual:false};used.set(best.id,(used.get(best.id)||0)+1);}
+    if(best){if(cur&&cur.photoId===best.id){cur.approx=best.cat!==s.cat;assign[s.id]=cur;}else assign[s.id]={photoId:best.id,rot:best.rot||0,flip:occFlip180(s,best.rot),approx:best.cat!==s.cat,manual:false};used.set(best.id,(used.get(best.id)||0)+1);}
     else delete assign[s.id];
   }
 }
@@ -2813,6 +2813,8 @@ function chartPanel(){
 const L6_RATIO=7/10.6;   // one premolar / lower first molar (Iraqi sample, Al-Dulayme 2014)
 const OCC_KEYS=["u3","l34","u6","l6g","l56","l6d"];
 const OCC_INFO={u3:{c:"#3CDC50",t:"U3"},l34:{c:"#E040E0",t:"L3|L4"},u6:{c:"#FFD800",t:"U6 MB"},l6g:{c:"#20D0F0",t:"L6 groove"},l56:{c:"#FFFFFF",t:"L5|L6"},l6d:{c:"#FFFFFF",t:"L6 distal"}};
+/* slide 14 (occlusal, mirror photos): when the AI turns a jaw 180°, it is always flipped horizontally as well */
+function occFlip180(s,rot){return !!s&&/^occ_(upper|lower)$/.test(s.cat||"")&&((((rot||0)%360)+360)%360)===180;}
 const isOccSlot=s=>!!s&&s.k===13&&!s.video&&/^io_(right|left)$/.test(s.cat||"");
 function rawToTurned(p,rot,flip,a,b){
   const sw=p.prev.width,sh=p.prev.height,r=((rot||0)%360+360)%360,rw=r%180?sh:sw,rh=r%180?sw:sh;
@@ -4010,6 +4012,7 @@ async function scheduleAlign(){
             // upper arch: incisors at the top (an upside-down U); lower arch: incisors at the bottom (a U) -
             // the two photos then close into an oval. A wrong side is turned over top-to-bottom (also undoes the mirror)
             if(bA){if(bA.incTop!==wantTop){a.rot=(bR+180)%360;a.flip=true;}else{a.rot=bR;a.flip=false;}}
+            else if(occFlip180(s,a.rot))a.flip=true;   // AI turned it 180°: flipped horizontally too
             a.occDone=a.photoId;
           }
           const r=((((a.rot||0)%360)+360)%360),turned=r===90||r===270,fk=`occ|${r}|${a.flip?1:0}`;
@@ -4782,7 +4785,7 @@ function openPicker(s){
   $("pickGrid").innerHTML=sorted.length?sorted.map(p=>thumbHtml(p,p.cat===s.cat?"match":"")).join(""):`<div class="empty-pool">${s.video?"لا يوجد فيديو مرفوع.":"لا توجد صور."}</div>`;
   $("pickGrid").querySelectorAll(".thumb").forEach(b=>b.onclick=()=>{
     const p=photos.find(x=>x.id===b.dataset.id);
-    assign[s.id]={photoId:p.id,rot:p.rot||0,flip:false,approx:false,manual:true};
+    assign[s.id]={photoId:p.id,rot:p.rot||0,flip:occFlip180(s,p.rot),approx:false,manual:true};
     closePicker();renderAll();
   });
   $("picker").hidden=false;$("pickClose").focus();
