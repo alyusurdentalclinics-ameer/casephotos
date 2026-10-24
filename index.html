@@ -3220,7 +3220,7 @@ async function openZoomView(s,pic,title){
    >6 large, >9 very large, <0 reverse; overbite normal 1-3.5 mm (about a third of the lower crown), >3.5
    increased, >5 deep bite, <0 open bite. */
 const OJ_KEYS=["r1","r2","u","l"];
-const OJ_VER=10;   // point rules version: older points (even hand-moved ones) are measured again with the current rules
+const OJ_VER=11;   // point rules version: older points (even hand-moved ones) are measured again with the current rules
 const OJ_INFO={r1:{c:"#FFFFFF",t:"ruler"},r2:{c:"#FFFFFF",t:"ruler"},u:{c:"#FFD800",t:"U1 edge"},l:{c:"#20D0F0",t:"L1"}};
 const isOJSlot=s=>!!s&&s.k===16&&!s.video&&/^io_over(jet|bite)$/.test(s.cat||"");
 const ojKind=s=>s.cat==="io_overbite"?"ob":"oj";
@@ -3363,6 +3363,51 @@ async function snapRuler(p,hint){
   let full=null;try{full=await createImageBitmap(p.file,{imageOrientation:"from-image"});}catch(_){}
   const R=detectRuler(full||p.prev,hint);if(full&&full.close)full.close();return R;
 }
+/* Overbite: find the lower incisor beside the ruler by itself (no AI). Lines parallel to the ruler, just outside
+   its metal edge, are scanned for tooth colour (light, warm: green above blue - gum and tongue are pink, blue ≥ green,
+   the steel is neutral grey); the longest tooth stretch (3-16 mm) gives the gum line (U1) and the incisal edge (L1).
+   R = {r1,r2,mm} on the ruler graduations (fractions). Returns {u,l} as fractions, or null. */
+function detectOBTooth(src,R){
+  if(!R||!R.r1||!R.r2||!(R.mm>0))return null;
+  const S=Math.min(1,1000/Math.max(src.width,src.height)),W=Math.round(src.width*S),H=Math.round(src.height*S);
+  const c=newCanvas(W,H),x=c.getContext("2d",{willReadFrequently:true});x.drawImage(src,0,0,W,H);const d=x.getImageData(0,0,W,H).data;
+  const px=(X,Y)=>{const xi=X|0,yi=Y|0;if(xi<1||yi<1||xi>=W-1||yi>=H-1)return null;let r=0,g=0,b=0;
+    for(const [dx,dy] of [[0,0],[1,0],[-1,0],[0,1],[0,-1]]){const i=((yi+dy)*W+xi+dx)*4;r+=d[i];g+=d[i+1];b+=d[i+2];}return [r/5,g/5,b/5];};
+  const metal=q=>{const [r,g,b]=q;return Math.max(r,g,b)>55&&Math.abs(r-b)<12&&Math.abs(r-g)<12&&Math.abs(g-b)<12;};   // neutral grey steel (teeth are warmer)
+  // enamel: little red over green (white teeth) or clearly less blue than green (yellow / stained teeth); gum: red over green with blue ≈ green
+  const tooth=q=>{const [r,g,b]=q,L=(r+g+b)/3;if(L<95||r-b<12)return false;const bg=b/Math.max(1,g),rg=r-g;return (rg<28&&bg>.8)||(bg<.86&&rg<55);};
+  const gum=q=>{const [r,g,b]=q;return r>90&&b>=g-4&&r-g>35;};
+  const A=[R.r1[0]*W,R.r1[1]*H],B=[R.r2[0]*W,R.r2[1]*H];let ax=B[0]-A[0],ay=B[1]-A[1];const len=Math.hypot(ax,ay);if(len<8)return null;
+  ax/=len;ay/=len;if(ay<0){ax=-ax;ay=-ay;}const nx=-ay,ny=ax,mm=len/R.mm,M=[(A[0]+B[0])/2,(A[1]+B[1])/2];
+  const at=(t,o)=>[M[0]+ax*t+nx*o,M[1]+ay*t+ny*o];
+  // metal edge on each side of the graduation line
+  const metalFrac=o=>{let m=0,k=0;for(let t=-len*.5;t<=len*.5;t+=1){const q=px(...at(t,o));if(!q)continue;k++;if(metal(q))m++;}return k?m/k:0;};
+  // the ruler's own length along its axis: the tooth beside it lies within it (an incisor of the other arch does not)
+  const metalAt=t=>{for(let o=-3*mm;o<=3*mm;o+=Math.max(1,mm*.5)){const q=px(...at(t,o));if(q&&metal(q))return true;}return false;};
+  let rt0=0,rt1=0;{let miss=0;for(let t=0;t>-40*mm;t-=1){if(metalAt(t)){rt0=t;miss=0;}else if(++miss>mm)break;}
+    miss=0;for(let t=0;t<40*mm;t+=1){if(metalAt(t)){rt1=t;miss=0;}else if(++miss>mm)break;}}
+  const T0=rt0-2*mm,T1=rt1+2*mm;
+  let best=null;
+  for(const sd of [1,-1]){
+    let e=0;for(let o=0;o<14*mm;o+=1){if(metalFrac(sd*o)<.3){e=o;break;}}if(!e)continue;
+    for(const k of [.4,.8,1.2,1.6,2,2.5]){const o=sd*(e+k*mm);
+      // tooth runs along the ruler direction (small breaks such as stains up to 0.6 mm are bridged)
+      let runs=[],s0=null,last=null;const gap=.6*mm;
+      for(let t=T0;t<=T1;t+=1){const q=px(...at(t,o));const isT=!!q&&tooth(q);
+        if(isT){if(s0==null)s0=t;last=t;}else if(s0!=null&&t-last>gap){runs.push([s0,last]);s0=null;}}
+      if(s0!=null)runs.push([s0,last]);
+      for(const [a0,a1] of runs){const L=(a1-a0)/mm;if(L<3||L>16)continue;
+        const sc=L-k*1.2;if(!best||sc>best.sc)best={sc,t0:a0,t1:a1,o};}}
+  }
+  if(!best)return null;
+  const top=at(best.t0,best.o),bot=at(best.t1,best.o);
+  // the gum end: pink just beyond it (default: the lower end - a lower incisor)
+  const gumScore=(t,dir)=>{let n=0;for(let s=.4*mm;s<=1.6*mm;s+=1){const q=px(...at(t+dir*s,best.o));if(q&&gum(q))n++;}return n;};
+  const gb=gumScore(best.t1,1),gt=gumScore(best.t0,-1);
+  const gumAtTop=gb===0&&gt>2;   // a lower incisor: the gum is below it (the tongue above it is pink too)
+  const f=P=>[P[0]/W,P[1]/H];
+  return gumAtTop?{u:f(top),l:f(bot)}:{u:f(bot),l:f(top)};
+}
 /* AI: the ruler marks and the incisor points; read twice with fixed seeds, median kept */
 const OJ_PROMPT=kind=>`This intraoral photo shows the front teeth with a small metal measuring RULER (steel strip with graduation marks in millimetres) held against them to measure the ${kind==="oj"?"OVERJET (horizontal distance between the upper and lower incisors; the ruler lies horizontally)":"OVERBITE (vertical overlap of the upper incisor over the lower incisor; the ruler stands vertically)"}.
 Give as [y, x] normalized 0-1000:
@@ -3395,6 +3440,10 @@ async function aiOverjet(p,kind,signal){
       if(ok&&kind==="ob"){const c=obCrownMm({...o,mm:+r.mm},p.prev.width,p.prev.height);if(c==null||c<3||c>15){bad++;continue;}}   // not a whole crown of 31
       if(ok&&+r.mm>0&&+r.mm<=60)reads.push({pts:o,mm:+r.mm,front:/right/i.test(String(r.front||""))?1:-1});
     }
+    if(!reads.length&&kind==="ob"){   // no usable AI read: ruler + tooth found from the picture itself
+      try{let full=null;try{full=await createImageBitmap(p.file,{imageOrientation:"from-image"});}catch(_){}
+        const src=full||p.prev,R=detectRuler(src,null),T=R&&detectOBTooth(src,R);if(full&&full.close)full.close();
+        if(R&&T){p.ojob={pts:{r1:R.r1,r2:R.r2,u:T.u,l:T.l},mm:R.mm,front:-1,man:false,fromAI:true,rulerAuto:true,toothAuto:true,v:OJ_VER};return true;}}catch(e){console.warn(e);}}
     if(!reads.length){p.ojFail=bad?(kind==="oj"?"الذكاء الاصطناعي وضع L1 على السن قبل طرف المسطرة (11) بدل 21 — ضع L1 يدوياً من «🔍 تكبير وقياس».":"الذكاء الاصطناعي لم يضع النقطتين على السن 31 (اللثة والحافة العليا) — ضعهما يدوياً من «🔍 تكبير وقياس»."):"لم يتعرّف الذكاء الاصطناعي على المسطرة أو حواف القواطع.";return false;}
     const P={};for(const k of OJ_KEYS)P[k]=[median(reads.map(r=>r.pts[k][0])),median(reads.map(r=>r.pts[k][1]))];
     p.ojob={pts:P,mm:median(reads.map(r=>r.mm)),front:reads[0].front,man:false,fromAI:true};
@@ -3405,6 +3454,10 @@ async function aiOverjet(p,kind,signal){
         if(kind==="oj"&&R.ends){const W=p.prev.width,H=p.prev.height,d=(A,B)=>Math.hypot((A[0]-B[0])*W,(A[1]-B[1])*H),rl=d(R.r1,R.r2)/(R.mm||1);
           const e=R.ends.slice().sort((A,B)=>d(A,P.u)-d(B,P.u))[0];
           if(d(e,P.u)<rl*1.5)p.ojob.pts.u=e;}}}catch(e){console.warn(e);}
+    if(kind==="ob"){   // the incisor beside the ruler, found in the picture: gum line (U1) and incisal edge (L1)
+      try{let full=null;try{full=await createImageBitmap(p.file,{imageOrientation:"from-image"});}catch(_){}
+        const T=detectOBTooth(full||p.prev,{r1:p.ojob.pts.r1,r2:p.ojob.pts.r2,mm:p.ojob.mm});if(full&&full.close)full.close();
+        if(T){p.ojob.pts.u=T.u;p.ojob.pts.l=T.l;p.ojob.toothAuto=true;}}catch(e){console.warn(e);}}
     p.ojob.v=OJ_VER;
     return true;
   }catch(e){if(!(e&&e.code==="cancelled"))p.ojFail="خطأ بالاتصال بالذكاء الاصطناعي: "+(typeof aiErrorText==="function"?aiErrorText(e):String(e&&e.message||e));throw e;}
