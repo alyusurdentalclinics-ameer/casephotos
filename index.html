@@ -4270,9 +4270,11 @@ async function scheduleAlign(){
           const R=()=>renderDisplayed(full||p.prev,{rot:a.rot,flip:a.flip,align:effAlign(a),bg:p.bg,zoom:a.zoom,tilt:a.tilt,level:a.eyeLevel,dx:a.dx,dy:a.dy,nudged:!!(a.dx||a.dy||(a.zoom&&a.zoom!==1))},W,H);
           // canting: the photo is turned until the line through the middle of both eyes is horizontal
           let st=await measureStick(R());
-          for(let it=0;it<5&&st&&st.eyeTilt!=null&&isFinite(st.eyeTilt)&&Math.abs(st.eyeTilt)>.05&&Math.abs((a.eyeLevel||0)+st.eyeTilt)<20;it++){
+          for(let it=0;it<5&&!a.levelMan&&st&&st.eyeTilt!=null&&isFinite(st.eyeTilt)&&Math.abs(st.eyeTilt)>.05&&Math.abs((a.eyeLevel||0)+st.eyeTilt)<20;it++){
             a.eyeLevel=(a.eyeLevel||0)+st.eyeTilt;st=await measureStick(R());}
           if(full&&full.close)full.close();
+          // turned by hand: the picture as the user set it is the reference - canting is read against the horizontal
+          if(st&&a.levelMan)st.eyeTilt=0;
           a.stick=st;a.stickTd=a.align.td;a.stickKey=a.alignKey;applyStickMan(s,a);
         }
         for(const s of slots){
@@ -4814,9 +4816,10 @@ function renderSlidesInner(){
         else if(act==="zout")a2.zoom=Math.max(.25,(a2.zoom||1)/1.04);
         else if(act==="left")a2.dx=(a2.dx||0)-.01;
         else if(act==="right")a2.dx=(a2.dx||0)+.01;
-        else if(act==="reset"){a2.zoom=1;a2.dx=0;a2.dy=0;a2.tilt=0;a2.occDone=null;a2.stickMan=null;a2.alignKey=null;}
+        else if(act==="reset"){a2.zoom=1;a2.dx=0;a2.dy=0;a2.tilt=0;a2.occDone=null;a2.stickMan=null;a2.levelMan=false;a2.alignKey=null;}
         else if(act==="t0")a2.tilt=0;
-        else if(act==="tl5"||act==="tl1"||act==="tr1"||act==="tr5")a2.tilt=Math.round(Math.max(-180,Math.min(180,(a2.tilt||0)+({tl5:-.25,tl1:-1,tr1:1,tr5:.25})[act]))*100)/100;
+        if((act==="t0"||act==="tl5"||act==="tl1"||act==="tr1"||act==="tr5")&&s.cat==="canting"){a2.levelMan=act!=="t0";a2.stickMan=null;a2.stick=undefined;a2.alignKey=null;}
+        if(act==="tl5"||act==="tl1"||act==="tr1"||act==="tr5")a2.tilt=Math.round(Math.max(-180,Math.min(180,(a2.tilt||0)+({tl5:-.25,tl1:-1,tr1:1,tr5:.25})[act]))*100)/100;
         else if(act==="up")a2.dy=(a2.dy||0)-.01;
         else if(act==="down")a2.dy=(a2.dy||0)+.01;
         a2.tweaked=true;renderAll();   // adjusting the picture does not lock which photo the frame holds
