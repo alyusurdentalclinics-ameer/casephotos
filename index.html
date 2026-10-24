@@ -874,15 +874,27 @@ async function archUpload(blob,meta){
   const f=await archCall("finish",{uploadId:b.uploadId});setBar("archBar",null);return f;
 }
 async function archDownload(id){
-  const inf=await archCall("info",{id}),parts=[];
-  const CH=4*1024*1024;
-  for(let i=0;i<inf.chunks;i++){const j=await archCall("get",{id,i});let b=b64ToBytes(j.data,(i+1)+"/"+inf.chunks);
-    const want=Math.min(CH,inf.size-i*CH);
-    if(inf.size&&b.length===inf.size&&inf.chunks>1)b=b.subarray(i*CH,i*CH+want);   // إذا Drive تجاهل Range ورجّع الملف كامل
-    else if(want>0&&b.length>want)b=b.subarray(0,want);
-    parts.push(b);setBar("archBar",(i+1)/inf.chunks);}
+  // 1 MB parts (big replies through the Apps Script web app can come back empty / broken), fetched 6 at a time
+  const inf=await archCall("info",{id,cs:1048576}),N=inf.chunks,parts=new Array(N);
+  const CH=inf.cs||4*1048576,PAR=Math.min(6,N);let done=0,next=0,stop=null;const t0=Date.now();
+  const one=async i=>{
+    const want=Math.min(CH,inf.size-i*CH);let err=null;
+    for(let tr=0;tr<4;tr++){
+      if(stop)return;
+      try{const j=await archCall("get",{id,i,cs:CH});let x=b64ToBytes(j.data,(i+1)+"/"+N);
+        if(inf.size&&x.length===inf.size&&N>1)x=x.subarray(i*CH,i*CH+want);   // Drive ignored the Range: whole file came back
+        else if(want>0&&x.length>want)x=x.subarray(0,want);
+        if(want>0&&x.length!==want)throw new Error(`الجزء ${i+1}/${N} وصل ناقص (${x.length} من ${want})`);
+        parts[i]=x;done++;setBar("archBar",done/N);
+        const sec=(Date.now()-t0)/1000,left=Math.round(sec/done*(N-done));
+        archMsg(`جارٍ التنزيل من الأرشيف… ${arNum(done)} / ${arNum(N)}${N-done>0&&done>=PAR?` — باقي تقريباً ${arNum(left)} ثانية`:""}`);return;}
+      catch(e){err=e;if(e&&e.code)break;await sleep(700*(tr+1));}}
+    stop=stop||err||new Error("تعذّر تنزيل الجزء "+(i+1));
+  };
+  await Promise.all(Array.from({length:PAR},async()=>{while(!stop&&next<N)await one(next++);}));
+  if(stop)throw stop;
   const tot=parts.reduce((a,b)=>a+b.length,0);if(inf.size&&tot!==inf.size)throw new Error("حجم الملف المنزَّل غير مطابق ("+tot+" من "+inf.size+") — أعد المحاولة.");
-  setBar("archBar",null);return {name:inf.fileName,blob:new Blob(parts,{type:PPTX_MIME})};
+  setBar("archBar",null);return {name:inf.fileName,blob:new Blob(parts,{type:/\.cpstate$/i.test(inf.fileName||"")?"application/zip":PPTX_MIME})};
 }
 async function archSaveLast(){
   const L=ARCH.last;if(!L||!ARCH.user||ARCH.busy)return;
@@ -945,7 +957,7 @@ $("archAuto").onchange=()=>{try{localStorage.setItem("cp_archAuto",$("archAuto")
    Kept on this device (IndexedDB, the last few — one is taken automatically before every «إنشاء العرض»), as a
    .cpstate file (zip: state.json + the photos), and in the patient's archive folder on the platform. */
 const STATE_FIELDS=["outName","closeup","evenFrames","whiteBg","levelBrows","fitLines","alignFaces","faceScale","dropEmpty","blankEmpty"];
-const P_SKIP=new Set(["file","prev","bg","faceCache","aiBlob","thumbUrl","frame","_wbm","occlBusy","ojBusy","w","h","video"]);
+const P_SKIP=new Set(["file","prev","bg","faceCache","aiBlob","thumbUrl","frame","_wbm","occlBusy","ojBusy","ojAutoTried","w","h","video"]);
 const ST_KEEP=4, STATE_MIME="application/zip";
 function stStringify(v){
   return JSON.stringify(v,(k,x)=>{
@@ -3222,6 +3234,9 @@ function ojResult(p,a,kind){
   // front direction (where the incisors point): from the AI / the user, turned like the photo
   const fr=O.front||1,f0=rawToTurned(p,rot,flip,.5,.5),f1=rawToTurned(p,rot,flip,.5+.1*fr,.5);let fx=(f1[0]-f0[0])*W,fy=(f1[1]-f0[1])*H;
   let s=Math.sign(ax*fx+ay*fy)||1;
+  // v3 points: u = start of the ruler at the lower incisor (31), l = edge of the upper incisor (11) on the ruler
+  //   → overjet = how far 11 lies in front of the ruler start; older points: u = upper edge, l = lower incisor
+  if(O.v>=3)return {v:((L[0]-U[0])*ax+(L[1]-U[1])*ay)*s*mmpx,mmpx};
   return {v:((U[0]-L[0])*ax+(U[1]-L[1])*ay)*s*mmpx,mmpx};
 }
 function ojGrade(kind,v){
@@ -3245,7 +3260,7 @@ function ojStatus(s){
   if(p.ojob&&p.ojob.pts){const R=ojResult(p,a,ojKind(s));if(!R)return {ok:false,msg:"نقاط المسطرة غير صالحة — صحّحها من «🔍 تكبير وقياس»."};return {ok:true,p,a,R,g:ojGrade(ojKind(s),R.v)};}
   if(p.ojFail)return {ok:false,msg:"تعذّر القياس: "+p.ojFail+" — ضع النقاط يدوياً من «🔍 تكبير وقياس»."};
   if(!aiReady())return {ok:false,msg:"لم تُقَس: لا يوجد مفتاح للذكاء الاصطناعي — ضع النقاط يدوياً من «🔍 تكبير وقياس»."};
-  return {ok:false,msg:"لم تُقَس بعد — اضغط «🤖 قياس تلقائي» أو «وزّع الصور»، أو ضع النقاط يدوياً من «🔍 تكبير وقياس»."};
+  return {ok:false,msg:"⏳ القياس يبدأ تلقائياً… (أو ضع النقاط يدوياً من «🔍 تكبير وقياس»)",busy:true};
 }
 /* drawing in any pixel space: the ruler (white, with the scale), the two points and the measured distance in red */
 /* the ends of the two lines square to the ruler (they go to the lower / right side of the ruler) */
@@ -3336,7 +3351,7 @@ function detectRuler(src,hint){
   const span=kmax-kmin>=10?10:kmax-kmin>=5?5:kmax-kmin;if(span<3)return null;
   const k1=kmin+Math.floor((kmax-kmin-span)/2),k2=k1+span;
   const toXY=p=>{const t=best.a+p;return [(cx+best.vx*best.off+best.ux*t)/W,(cy+best.vy*best.off+best.uy*t)/H];};
-  return {r1:toXY(p0+step*k1),r2:toXY(p0+step*k2),mm:span,step:step/S,score:best.score};
+  return {r1:toXY(p0+step*k1),r2:toXY(p0+step*k2),mm:span,step:step/S,score:best.score,ends:[toXY(0),toXY(best.seg.length-1)]};   // ends = the two ends of the metal strip along the scale
 }
 /* refine the ruler points of a photo with the ruler finder (near the AI's rough ruler line when there is one) */
 async function snapRuler(p,hint){
@@ -3347,8 +3362,9 @@ async function snapRuler(p,hint){
 const OJ_PROMPT=kind=>`This intraoral photo shows the front teeth with a small metal measuring RULER (steel strip with graduation marks in millimetres) held against them to measure the ${kind==="oj"?"OVERJET (horizontal distance between the upper and lower incisors; the ruler lies horizontally)":"OVERBITE (vertical overlap of the upper incisor over the lower incisor; the ruler stands vertically)"}.
 Give as [y, x] normalized 0-1000:
 - r1 and r2: two CLEAR graduation marks of the ruler, as far apart as you can read reliably, and mm = the number of millimetres between them (count the marks; on most such rulers the small marks are 1 mm apart and longer marks every 5 mm).
-- u: the INCISAL EDGE (tip) of the most forward upper central incisor.
-- l: ${kind==="oj"?"the point of the LABIAL (front) surface of the lower central incisor that faces the upper incisal edge (the lower incisor's front surface at the level of the upper edge)":"the INCISAL EDGE (tip) of the lower central incisor (even when it is hidden behind the upper incisor, give where its edge is)"}.
+${kind==="oj"?`- u: the START of the ruler = the END (tip) of the metal ruler strip, where its scale begins; the tip rests against the LABIAL surface of the LOWER central incisor (tooth 31 / 41). Give the tip point.
+- l: on the ruler, the point level with the INCISAL EDGE of the UPPER central incisor (tooth 11): the most forward (labial) point of the upper incisor's edge, where it lies over the ruler.`:`- u: the START of the ruler = the END (tip) of the metal ruler strip, where its scale begins, at the upper incisor (the ruler is placed with its end at the upper incisor: this end is the upper incisor reference, "U1 edge").
+- l: on the ruler, the point where the HIGHEST (most incisal) point of the LOWER front (central) incisor meets the ruler - the top of the lower incisor crown where it touches / lies against the ruler.`}
 - front: "left" if the incisors / face point to the left of the image, "right" if to the right.
 Reply with only JSON: {"r1":[y,x],"r2":[y,x],"mm":10,"u":[y,x],"l":[y,x],"front":"left"}`;
 async function aiOverjet(p,kind,signal){
@@ -3366,7 +3382,12 @@ async function aiOverjet(p,kind,signal){
     const P={};for(const k of OJ_KEYS)P[k]=[median(reads.map(r=>r.pts[k][0])),median(reads.map(r=>r.pts[k][1]))];
     p.ojob={pts:P,mm:median(reads.map(r=>r.mm)),front:reads[0].front,man:false,fromAI:true};
     // the graduations themselves fix the scale more exactly than the AI's two points
-    try{const R=await snapRuler(p,{r1:P.r1,r2:P.r2});if(R){p.ojob.pts.r1=R.r1;p.ojob.pts.r2=R.r2;p.ojob.mm=R.mm;p.ojob.rulerAuto=true;}}catch(e){console.warn(e);}
+    try{const R=await snapRuler(p,{r1:P.r1,r2:P.r2});if(R){p.ojob.pts.r1=R.r1;p.ojob.pts.r2=R.r2;p.ojob.mm=R.mm;p.ojob.rulerAuto=true;
+        // U1 = the start (end) of the ruler: the strip end nearest the AI's point (or nearest the lower incisor)
+        if(R.ends){const W=p.prev.width,H=p.prev.height,d=(A,B)=>Math.hypot((A[0]-B[0])*W,(A[1]-B[1])*H),rl=d(R.r1,R.r2)/(R.mm||1);
+          const e=R.ends.slice().sort((A,B)=>d(A,P.u)-d(B,P.u))[0];
+          if(d(e,P.u)<rl*6)p.ojob.pts.u=e;}}}catch(e){console.warn(e);}
+    p.ojob.v=3;
     return true;
   }catch(e){if(!(e&&e.code==="cancelled"))p.ojFail="خطأ بالاتصال بالذكاء الاصطناعي: "+(typeof aiErrorText==="function"?aiErrorText(e):String(e&&e.message||e));throw e;}
   finally{p.ojBusy=false;}
@@ -3384,7 +3405,7 @@ async function openOJZoom(s){
   const a=assign[s.id],p=a&&photos.find(x=>x.id===a.photoId);if(!a||!p)return;const kind=ojKind(s);
   const freshOJ=!p.ojob||!p.ojob.pts;
   if(!p.ojob||!p.ojob.pts){const T=(u,v)=>turnedToRaw(p,a.rot,a.flip,u,v);
-    p.ojob={pts:kind==="oj"?{r1:T(.35,.62),r2:T(.65,.62),u:T(.52,.45),l:T(.48,.5)}:{r1:T(.6,.3),r2:T(.6,.7),u:T(.5,.5),l:T(.5,.45)},mm:10,front:-1,man:true};}
+    p.ojob={pts:kind==="oj"?{r1:T(.35,.62),r2:T(.65,.62),u:T(.45,.6),l:T(.52,.6)}:{r1:T(.6,.3),r2:T(.6,.7),u:T(.5,.5),l:T(.5,.45)},mm:10,front:-1,man:true,v:3};}
   if(freshOJ){try{const R=await snapRuler(p,null);if(R){p.ojob.pts.r1=R.r1;p.ojob.pts.r2=R.r2;p.ojob.mm=R.mm;p.ojob.rulerAuto=true;}}catch(e){console.warn(e);}}
   const fr=frameRect(s),ar=fr.w/fr.h,BW=3000,BH=Math.round(BW/ar);
   let full=null;try{full=await createImageBitmap(p.file,{imageOrientation:"from-image"});}catch(_){}
@@ -4446,7 +4467,19 @@ async function fitWholeHeads(){
   }
 }
 
-function renderAll(){renderSlides();renderPool();renderSummary();updateButtons();scheduleAlign();smileWatch();try{stButtons();}catch(_){}}
+function renderAll(){renderSlides();renderPool();renderSummary();updateButtons();scheduleAlign();smileWatch();try{stButtons();}catch(_){}ojWatch();}
+/* slide 16 is always measured by itself: every Overjet / Overbite photo that is placed and not measured yet
+   (or measured with the old point rule) is measured in the background; hand-corrected points are kept */
+let ojWatchBusy=false;
+async function ojWatch(){
+  if(ojWatchBusy||aiCtl||!aiReady())return;
+  const todo=[];for(const s of slots){if(!isOJSlot(s))continue;const a=assign[s.id],p=a&&a.photoId&&photos.find(x=>x.id===a.photoId);
+    if(!p||p.ojBusy||(p.ojob&&p.ojob.man)||(p.ojob&&p.ojob.v===3)||p.ojAutoTried===ojKind(s))continue;todo.push([s,p]);}
+  if(!todo.length)return;ojWatchBusy=true;
+  try{for(const [s,p] of todo){p.ojAutoTried=ojKind(s);renderSlides();
+      try{await aiOverjet(p,ojKind(s),new AbortController().signal);}catch(e){console.warn(e);}renderSlides();}}
+  finally{ojWatchBusy=false;}
+}
 /* whenever the set of smiling photos changes (AI, manual category change, new upload), re-check which one is
    opened wider - independent of how the categories were set */
 let smileBusy=false;
@@ -4518,7 +4551,7 @@ function renderSlidesInner(){
       const el=document.createElement("div");el.className="slot"+(sar>1.2?" wide":"");el.dataset.sid=s.id;
       el.innerHTML=`<div class="pv" tabindex="0" role="button" aria-label="تغيير صورة ${esc(s.label)}" style="aspect-ratio:${sar.toFixed(4)}"><canvas></canvas>${p?"":`<div class="ph">${s.cat?"اضغط لاختيار صورة":"إطار غير معروف — اختر يدويًا"}</div>`}</div>
         <div class="slot-meta"><div class="slot-label">${esc(s.label)}${s.en?`<small>${esc(s.en)}</small>`:""}</div><span class="badge ${cls}">${txt}</span></div>${a&&a.align&&alignActive(a.align)?`<div class="aligned">✓ الوجه مطابق لخطوط القالب</div>`:""}
-        ${p&&!s.video?`<div class="tools"><button class="btn sm" data-act="rot" type="button" title="تدوير ٩٠ درجة">↻ تدوير</button><button class="btn sm" data-act="flip" type="button" title="قلب أفقي">⇋ قلب</button>${/^occ_/.test(s.cat)?`<button class="btn sm" data-act="vflip" type="button" title="قلب من فوق لتحت (الأسنان الأمامية للجهة الثانية)">⇅ قلب عمودي</button>`:""}${s.cat==="canting"&&a&&a.stick&&a.stick.x1!=null?`<button class="btn sm" data-act="stickzoom" type="button" title="فتح صورة الفم مكبّرة لضبط خط العود بدقة">🔍 تكبير الفم</button>`:""}${s.cat==="canting"&&a&&a.stickMan?`<button class="btn sm" data-act="stickauto" type="button" title="إرجاع خط العود للقياس التلقائي">↺ العود تلقائي</button>`:""}<button class="btn sm" data-act="zoomv" type="button" title="${isOJSlot(s)?"تكبير الصورة مع نقاط القياس القابلة للسحب":isOccSlot(s)?"تكبير الصورة مع نقاط تحليل الإطباق القابلة للسحب":"فتح الصورة مكبّرة بشاشة كاملة"}">${isOJSlot(s)?"🔍 تكبير وقياس":isOccSlot(s)?"🔍 تكبير وتحليل":"🔍 تكبير"}</button>${isOJSlot(s)?`<button class="btn sm" data-act="ojai" type="button" title="القياس بالذكاء الاصطناعي">🤖 قياس تلقائي</button>`:""}${isOccSlot(s)?`<button class="btn sm" data-act="occai" type="button" title="تحليل الصورة بالذكاء الاصطناعي من جديد">🤖 تحليل تلقائي</button>${p&&p.occl&&p.occl.pts?`<button class="btn sm" data-act="occlines" type="button" title="حذف/إرجاع خطوط التحليل من الصورة والشريحة (النتيجة تبقى مكتوبة)">${p.occl.noLines?"↩ إرجاع الخطوط":"🗑 حذف الخطوط"}</button><button class="btn sm" data-act="occhide" type="button" title="إظهار/إخفاء خطوط التحليل في الشريحة">${p.occl.hide?"👁 إظهار التحليل":"✕ إخفاء التحليل"}</button>`:""}`:""}${WHITE_RE.test(s.cat)?`<button class="btn sm" data-act="wbg" type="button" title="تشغيل/إيقاف الخلفية البيضاء لهذه الصورة">${a&&a.noWhite?"▨ الخلفية الأصلية":"⬜ خلفية بيضاء"}</button>`:""}</div><div class="tools nudge"><button class="btn sm" data-act="zin" type="button" title="تكبير">＋</button><button class="btn sm" data-act="zout" type="button" title="تصغير">－</button><button class="btn sm" data-act="up" type="button" title="تحريك للأعلى">▲</button><button class="btn sm" data-act="down" type="button" title="تحريك للأسفل">▼</button><button class="btn sm" data-act="left" type="button" title="تحريك لليسار">◀</button><button class="btn sm" data-act="right" type="button" title="تحريك لليمين">▶</button><button class="btn sm" data-act="reset" type="button" title="إرجاع الوضع التلقائي (يلغي التكبير والتحريك والميلان)">↺ Reset</button></div>${true?`<div class="tools nudge"><button class="btn sm" data-act="tl5" type="button" title="تدوير ربع درجة عكس عقارب الساعة">↺0.25°</button><button class="btn sm" data-act="tl1" type="button" title="تدوير درجة عكس عقارب الساعة">↺1°</button><button class="btn sm" data-act="t0" type="button" title="إرجاع الميلان إلى صفر">${(Math.round((a&&a.tilt||0)*100)/100)}°</button><button class="btn sm" data-act="tr1" type="button" title="تدوير درجة مع عقارب الساعة">↻1°</button><button class="btn sm" data-act="tr5" type="button" title="تدوير ربع درجة مع عقارب الساعة">↻0.25°</button></div>`:""}`:""}`;
+        ${p&&!s.video?`<div class="tools"><button class="btn sm" data-act="rot" type="button" title="تدوير ٩٠ درجة">↻ تدوير</button><button class="btn sm" data-act="flip" type="button" title="قلب أفقي">⇋ قلب</button>${/^occ_/.test(s.cat)?`<button class="btn sm" data-act="vflip" type="button" title="قلب من فوق لتحت (الأسنان الأمامية للجهة الثانية)">⇅ قلب عمودي</button>`:""}${s.cat==="canting"&&a&&a.stick&&a.stick.x1!=null?`<button class="btn sm" data-act="stickzoom" type="button" title="فتح صورة الفم مكبّرة لضبط خط العود بدقة">🔍 تكبير الفم</button>`:""}${s.cat==="canting"&&a&&a.stickMan?`<button class="btn sm" data-act="stickauto" type="button" title="إرجاع خط العود للقياس التلقائي">↺ العود تلقائي</button>`:""}<button class="btn sm" data-act="zoomv" type="button" title="${isOJSlot(s)?"تكبير الصورة مع نقاط القياس القابلة للسحب":isOccSlot(s)?"تكبير الصورة مع نقاط تحليل الإطباق القابلة للسحب":"فتح الصورة مكبّرة بشاشة كاملة"}">${isOJSlot(s)?"🔍 تكبير وقياس":isOccSlot(s)?"🔍 تكبير وتحليل":"🔍 تكبير"}</button>${isOccSlot(s)?`<button class="btn sm" data-act="occai" type="button" title="تحليل الصورة بالذكاء الاصطناعي من جديد">🤖 تحليل تلقائي</button>${p&&p.occl&&p.occl.pts?`<button class="btn sm" data-act="occlines" type="button" title="حذف/إرجاع خطوط التحليل من الصورة والشريحة (النتيجة تبقى مكتوبة)">${p.occl.noLines?"↩ إرجاع الخطوط":"🗑 حذف الخطوط"}</button><button class="btn sm" data-act="occhide" type="button" title="إظهار/إخفاء خطوط التحليل في الشريحة">${p.occl.hide?"👁 إظهار التحليل":"✕ إخفاء التحليل"}</button>`:""}`:""}${WHITE_RE.test(s.cat)?`<button class="btn sm" data-act="wbg" type="button" title="تشغيل/إيقاف الخلفية البيضاء لهذه الصورة">${a&&a.noWhite?"▨ الخلفية الأصلية":"⬜ خلفية بيضاء"}</button>`:""}</div><div class="tools nudge"><button class="btn sm" data-act="zin" type="button" title="تكبير">＋</button><button class="btn sm" data-act="zout" type="button" title="تصغير">－</button><button class="btn sm" data-act="up" type="button" title="تحريك للأعلى">▲</button><button class="btn sm" data-act="down" type="button" title="تحريك للأسفل">▼</button><button class="btn sm" data-act="left" type="button" title="تحريك لليسار">◀</button><button class="btn sm" data-act="right" type="button" title="تحريك لليمين">▶</button><button class="btn sm" data-act="reset" type="button" title="إرجاع الوضع التلقائي (يلغي التكبير والتحريك والميلان)">↺ Reset</button></div>${true?`<div class="tools nudge"><button class="btn sm" data-act="tl5" type="button" title="تدوير ربع درجة عكس عقارب الساعة">↺0.25°</button><button class="btn sm" data-act="tl1" type="button" title="تدوير درجة عكس عقارب الساعة">↺1°</button><button class="btn sm" data-act="t0" type="button" title="إرجاع الميلان إلى صفر">${(Math.round((a&&a.tilt||0)*100)/100)}°</button><button class="btn sm" data-act="tr1" type="button" title="تدوير درجة مع عقارب الساعة">↻1°</button><button class="btn sm" data-act="tr5" type="button" title="تدوير ربع درجة مع عقارب الساعة">↻0.25°</button></div>`:""}`:""}`;
       const pv=el.querySelector(".pv");
       pv.onclick=()=>{if(el._noPick)return;openPicker(s);};
       pv.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openPicker(s);}};
