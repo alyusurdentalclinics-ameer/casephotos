@@ -2522,7 +2522,7 @@ async function openStickZoom(s){
   if(full&&full.close)full.close();
   const S={x1:a.stick.x1,y1:a.stick.y1,x2:a.stick.x2,y2:a.stick.y2,ey:a.stick.ey,eyeTilt:a.stick.eyeTilt||0};
   const ov=document.createElement("div");
-  ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;overflow:hidden;width:100vw;height:100vh;box-sizing:border-box;font-family:Tajawal,Tahoma,sans-serif";
+  ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;overflow:hidden;box-sizing:border-box;max-width:100%;max-height:100%;font-family:Tajawal,Tahoma,sans-serif";
   ov.innerHTML=`<button class="btn sm" data-z="ok" type="button" title="إغلاق (يحفظ التعديلات)" style="position:absolute;top:10px;left:10px;z-index:3;font-size:20px;line-height:1;padding:6px 12px;background:#C00000;color:#fff;border-radius:50%">✕</button><div style="display:flex;gap:6px 8px;align-items:center;padding:8px 12px 8px 64px;color:#fff;flex-wrap:wrap;background:#0a1014;min-width:0;max-width:100%;box-sizing:border-box;flex:none">
     <b style="font-size:18px">تكبير الفم — ضبط خط العود</b><span class="ang" style="background:#fff;color:#C00000;font-weight:700;padding:3px 10px;border-radius:6px;direction:ltr"></span>
     <span style="opacity:.8;font-size:13px;flex:1 1 260px;min-width:0">اسحب الدائرة لتحريك طرف العود · اسحب الصورة للتنقل · عجلة الماوس للتكبير · الأسهم تحرك الطرف المختار بدقة</span>
@@ -3054,7 +3054,7 @@ async function openOccZoom(s){
   const map=big._map,inv=invMap(map),keep=JSON.parse(JSON.stringify(p.occl));
   const S={};{const F=occPtsFrame(p,a,map);for(const k of OCC_KEYS)S[k]=F[k].slice();}
   const ov=document.createElement("div");
-  ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;overflow:hidden;width:100vw;height:100vh;box-sizing:border-box;font-family:Tajawal,Tahoma,sans-serif";
+  ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;overflow:hidden;box-sizing:border-box;max-width:100%;max-height:100%;font-family:Tajawal,Tahoma,sans-serif";
   ov.innerHTML=`<button class="btn sm" data-z="ok" type="button" title="إغلاق (يحفظ التعديلات)" style="position:absolute;top:10px;left:10px;z-index:3;font-size:20px;line-height:1;padding:6px 12px;background:#C00000;color:#fff;border-radius:50%">✕</button><div style="display:flex;gap:6px 8px;align-items:center;padding:8px 12px 8px 64px;color:#fff;flex-wrap:wrap;background:#0a1014;min-width:0;max-width:100%;box-sizing:border-box;flex:none">
     <b style="font-size:18px">تحليل الإطباق — Molar / Canine</b><span class="res" style="background:#fff;color:#000;font-weight:700;padding:3px 10px;border-radius:6px;direction:ltr"></span>
     <span style="opacity:.85;font-size:13px;flex:1 1 260px;min-width:0">اسحب النقاط: <b style="color:#3CDC50">U3</b> قمة الناب العلوي · <b style="color:#E040E0">L3|L4</b> بين الناب والضاحك الأول السفلي · <b style="color:#FFD800">U6 MB</b> الحدبة الأمامية الخارجية للرحى العلوية · <b style="color:#20D0F0">L6 groove</b> الأخدود الخارجي للرحى السفلية · L5|L6 و L6 distal حدود الرحى السفلية (للمعايرة) · الأسهم تحرك النقطة المختارة</span>
@@ -3185,7 +3185,7 @@ async function openZoomView(s,pic,title){
   const hRes=()=>{if(!LL)return "";const m=LL.nose-LL.brow,lo=LL.chin-LL.nose;if(!(m>0))return "";const d=(lo-m)/m*100;
     return `حاجب→أنف ${(m/(LL.chin-LL.brow)*100).toFixed(1)}٪ · أنف→ذقن ${(lo/(LL.chin-LL.brow)*100).toFixed(1)}٪ · الفرق ${d>=0?"+":""}${d.toFixed(1)}٪ ${Math.abs(d)<3?"(متساويان تقريباً)":d>0?"(السفلي أطول)":"(السفلي أقصر)"}`;};
   const ov=document.createElement("div");
-  ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;overflow:hidden;width:100vw;height:100vh;box-sizing:border-box;font-family:Tajawal,Tahoma,sans-serif";
+  ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;overflow:hidden;box-sizing:border-box;max-width:100%;max-height:100%;font-family:Tajawal,Tahoma,sans-serif";
   ov.innerHTML=`<button class="btn sm" data-z="no" type="button" title="إغلاق" style="position:absolute;top:10px;left:10px;z-index:3;font-size:20px;line-height:1;padding:6px 12px;background:#C00000;color:#fff;border-radius:50%">✕</button><div style="display:flex;gap:6px 8px;align-items:center;padding:8px 12px 8px 64px;color:#fff;flex-wrap:wrap;background:#0a1014;min-width:0;max-width:100%;box-sizing:border-box;flex:none">
     <b style="font-size:18px">تكبير — ${esc(title||s.label)}</b>${LL?`<span class="res" style="background:#fff;color:#000;font-weight:700;padding:3px 10px;border-radius:6px;direction:rtl"></span>`:""}<span style="opacity:.8;font-size:13px;flex:1 1 260px;min-width:0">${LL?"اسحب خط الحاجب أو الأنف أو الذقن للأعلى أو الأسفل (عمودياً فقط) · اسحب الصورة للتنقل · عجلة الماوس للتكبير · الشريط الثاني بطول الأول للمقارنة":"اسحب الصورة للتنقل · عجلة الماوس أو ＋/－ للتكبير · Esc للإغلاق"}</span>
     <span style="flex:1"></span>${guides?`<label style="font-size:13px"><input type="checkbox" class="gl" checked> خطوط الشريحة</label>`:""}${LL?`<button class="btn sm" data-z="auto" type="button" title="يرجع الخطوط لمكانها التلقائي">↺ الخطوط التلقائية</button>`:""}
@@ -3524,6 +3524,11 @@ const keepOJRuler=p=>!!(p.ojob&&(p.ojob.rulerAuto||p.ojob.man||p.ojob.fromAI));
    row 2 all the buttons in one line (scrolls sideways if the screen is narrow), row 3 the help text (2 lines max).
    Nothing moves when the result or the help text gets longer or shorter. */
 function zoomHeaderLayout(ov){
+  // the zoom page is exactly the computer screen: no page scroll bars behind it (they made it wider than the screen)
+  ov.style.left="0";ov.style.top="0";ov.style.right="0";ov.style.bottom="0";ov.style.width="auto";ov.style.height="auto";
+  const de=document.documentElement,prevO=de.style.overflow,prevB=document.body.style.overflow;de.style.overflow="hidden";document.body.style.overflow="hidden";
+  const mo=new MutationObserver(()=>{if(!ov.isConnected){de.style.overflow=prevO;document.body.style.overflow=prevB;mo.disconnect();}});
+  setTimeout(()=>mo.observe(document.body,{childList:true}),0);
   const hd=[...ov.children].find(e=>e.tagName==="DIV");if(!hd||hd.dataset.fixed)return;hd.dataset.fixed="1";
   const kids=[...hd.childNodes].filter(n=>n.nodeType===1);
   const title=kids.find(e=>e.tagName==="B"),res=kids.find(e=>e.classList&&(e.classList.contains("res")||e.classList.contains("ang")));
@@ -3537,7 +3542,7 @@ function zoomHeaderLayout(ov){
   if(title){title.style.flex="none";r1.appendChild(title);}
   if(res){res.style.cssText+=";flex:1 1 0;min-width:0;max-width:760px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left";
     new MutationObserver(()=>{res.title=res.textContent;}).observe(res,{childList:true,characterData:true,subtree:true});r1.appendChild(res);}
-  const r2=document.createElement("div");r2.style.cssText="display:flex;align-items:center;gap:6px;height:36px;min-width:0;white-space:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin";
+  const r2=document.createElement("div");r2.style.cssText="display:flex;align-items:center;gap:6px;min-height:36px;min-width:0;flex-wrap:wrap;white-space:nowrap";   // a narrow screen wraps the buttons to a 2nd line instead of hiding اعتماد / إلغاء
   for(const e of tools){e.style.flex="none";r2.appendChild(e);}
   const sp=document.createElement("span");sp.style.cssText="flex:1 0 12px";r2.appendChild(sp);
   for(const e of ends){e.style.flex="none";r2.appendChild(e);}
@@ -3557,7 +3562,7 @@ async function openOJZoom(s){
   const map=big._map,inv=invMap(map),keep=JSON.parse(JSON.stringify(p.ojob));
   const S={};{const F=ojPtsFrame(p,a,map);for(const k of OJ_KEYS)S[k]=F[k].slice();}
   const ov=document.createElement("div");
-  ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;overflow:hidden;width:100vw;height:100vh;box-sizing:border-box;font-family:Tajawal,Tahoma,sans-serif";
+  ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;overflow:hidden;box-sizing:border-box;max-width:100%;max-height:100%;font-family:Tajawal,Tahoma,sans-serif";
   ov.innerHTML=`<button class="btn sm" data-z="ok" type="button" title="إغلاق (يحفظ التعديلات)" style="position:absolute;top:10px;left:10px;z-index:3;font-size:20px;line-height:1;padding:6px 12px;background:#C00000;color:#fff;border-radius:50%">✕</button><div style="display:flex;gap:6px 8px;align-items:center;padding:8px 12px 8px 64px;color:#fff;flex-wrap:wrap;background:#0a1014;min-width:0;max-width:100%;box-sizing:border-box;flex:none">
     <b style="font-size:18px">قياس ${kind==="oj"?"Overjet":"Overbite"}</b><span class="res" style="background:#fff;color:#000;font-weight:700;padding:3px 10px;border-radius:6px;direction:ltr"></span>
     <label style="font-size:13px">المسافة بين نقطتي المسطرة: <input class="mm" type="number" min="0.5" max="60" step="0.5" style="width:70px;direction:ltr"> ملم</label>
