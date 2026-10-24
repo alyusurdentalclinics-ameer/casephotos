@@ -3177,12 +3177,17 @@ async function openZoomView(s,pic,title){
     try{const list=slots.filter(t=>t.n===s.n);const FY=fixedGuides(s,list);
       guides=FY?FY.map(y=>(y-fr.top)/fr.h):(a.align&&a.align.guide?a.align.guide.slice():null);}catch(_){}
   }
+  // slide 2 (face heights): the brow / nose / chin lines can be moved up and down here
+  const HA=!pic&&isHeightsSlot(s)&&assign[s.id]&&assign[s.id].lines?assign[s.id]:null;
+  const LL=HA?{brow:HA.lines.brow,nose:HA.lines.nose,chin:HA.lines.chin}:null;if(LL)guides=null;
+  const hRes=()=>{if(!LL)return "";const m=LL.nose-LL.brow,lo=LL.chin-LL.nose;if(!(m>0))return "";const d=(lo-m)/m*100;
+    return `حاجب→أنف ${(m/(LL.chin-LL.brow)*100).toFixed(1)}٪ · أنف→ذقن ${(lo/(LL.chin-LL.brow)*100).toFixed(1)}٪ · الفرق ${d>=0?"+":""}${d.toFixed(1)}٪ ${Math.abs(d)<3?"(متساويان تقريباً)":d>0?"(السفلي أطول)":"(السفلي أقصر)"}`;};
   const ov=document.createElement("div");
   ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;overflow:hidden;width:100vw;height:100vh;box-sizing:border-box;font-family:Tajawal,Tahoma,sans-serif";
   ov.innerHTML=`<button class="btn sm" data-z="no" type="button" title="إغلاق" style="position:absolute;top:10px;left:10px;z-index:3;font-size:20px;line-height:1;padding:6px 12px;background:#C00000;color:#fff;border-radius:50%">✕</button><div style="display:flex;gap:6px 8px;align-items:center;padding:8px 12px 8px 64px;color:#fff;flex-wrap:wrap;background:#0a1014;min-width:0;max-width:100%;box-sizing:border-box;flex:none">
-    <b style="font-size:18px">تكبير — ${esc(title||s.label)}</b><span style="opacity:.8;font-size:13px;flex:1 1 260px;min-width:0">اسحب الصورة للتنقل · عجلة الماوس أو ＋/－ للتكبير · Esc للإغلاق</span>
-    <span style="flex:1"></span>${guides?`<label style="font-size:13px"><input type="checkbox" class="gl" checked> خطوط الشريحة</label>`:""}
-    <button class="btn sm" data-z="in">＋ تكبير</button><button class="btn sm" data-z="out">－ تصغير</button><button class="btn sm" data-z="fit">ملء الشاشة</button><button class="btn sm" data-z="no">✕ إغلاق</button></div>
+    <b style="font-size:18px">تكبير — ${esc(title||s.label)}</b>${LL?`<span class="res" style="background:#fff;color:#000;font-weight:700;padding:3px 10px;border-radius:6px;direction:rtl"></span>`:""}<span style="opacity:.8;font-size:13px;flex:1 1 260px;min-width:0">${LL?"اسحب خط الحاجب أو الأنف أو الذقن للأعلى أو الأسفل (عمودياً فقط) · اسحب الصورة للتنقل · عجلة الماوس للتكبير · الشريط الثاني بطول الأول للمقارنة":"اسحب الصورة للتنقل · عجلة الماوس أو ＋/－ للتكبير · Esc للإغلاق"}</span>
+    <span style="flex:1"></span>${guides?`<label style="font-size:13px"><input type="checkbox" class="gl" checked> خطوط الشريحة</label>`:""}${LL?`<button class="btn sm" data-z="auto" type="button" title="يرجع الخطوط لمكانها التلقائي">↺ الخطوط التلقائية</button>`:""}
+    <button class="btn sm" data-z="in">＋ تكبير</button><button class="btn sm" data-z="out">－ تصغير</button><button class="btn sm" data-z="fit">ملء الشاشة</button>${LL?`<button class="btn sm" data-z="ok" style="background:#1f8f4e;color:#fff">✓ اعتماد</button><button class="btn sm" data-z="cancel">إلغاء</button>`:`<button class="btn sm" data-z="no">✕ إغلاق</button>`}</div>
     <canvas style="flex:1 1 0;width:100%;min-height:0;min-width:0;max-width:100%;display:block;cursor:grab;touch-action:none"></canvas>`;
   zoomHeaderLayout(ov);document.body.appendChild(ov);
   const cv=ov.querySelector("canvas"),g=cv.getContext("2d");
@@ -3194,20 +3199,43 @@ async function openZoomView(s,pic,title){
     const sw=vw/z,sh=vh/z;g.drawImage(big,cx-sw/2,cy-sh/2,sw,sh,0,0,vw,vh);
     const gl=ov.querySelector(".gl");
     if(guides&&(!gl||gl.checked)){g.save();g.strokeStyle="rgba(43,120,184,.9)";g.lineWidth=2;g.setLineDash([9,6]);
-      for(const v of guides){const y=(v*BH-cy)*z+vh/2;g.beginPath();g.moveTo(0,y);g.lineTo(vw,y);g.stroke();}g.restore();}};
+      for(const v of guides){const y=(v*BH-cy)*z+vh/2;g.beginPath();g.moveTo(0,y);g.lineTo(vw,y);g.stroke();}g.restore();}
+    if(LL){const Y=v=>(v*BH-cy)*z+vh/2,X=u=>(u*BW-cx)*z+vw/2;g.save();
+      const nm={brow:"الحاجب",nose:"الأنف",chin:"الذقن"};
+      for(const k of ["brow","nose","chin"]){const y=Y(LL[k]);g.strokeStyle=hSel===k?"#FFD800":"#4A90D9";g.lineWidth=hSel===k?3:2;g.beginPath();g.moveTo(0,y);g.lineTo(vw,y);g.stroke();
+        g.font="bold 14px Tajawal,sans-serif";g.textBaseline="bottom";g.lineWidth=3;g.strokeStyle="rgba(0,0,0,.6)";g.strokeText(nm[k],X(.02),y-3);g.fillStyle=hSel===k?"#FFD800":"#fff";g.fillText(nm[k],X(.02),y-3);}
+      if(HA.lines.mid!=null){g.strokeStyle="#E02020";g.lineWidth=2;g.beginPath();g.moveTo(X(HA.lines.mid),0);g.lineTo(X(HA.lines.mid),vh);g.stroke();}
+      // the two bars as on the slide: brow→nose, and the same length again from the nose (for comparison with the chin line)
+      const bx=X(.96);g.lineCap="round";g.strokeStyle="#4A90D9";g.lineWidth=8;
+      g.beginPath();g.moveTo(bx,Y(LL.brow));g.lineTo(bx,Y(LL.nose));g.stroke();
+      g.beginPath();g.moveTo(bx-14,Y(LL.nose));g.lineTo(bx-14,Y(2*LL.nose-LL.brow));g.stroke();
+      g.strokeStyle="#E02020";g.lineWidth=3;g.beginPath();g.moveTo(bx-30,Y(2*LL.nose-LL.brow));g.lineTo(bx-30,Y(LL.chin));g.stroke();
+      g.restore();const rs=ov.querySelector(".res");if(rs)rs.textContent=hRes();}};
   const zoomAt=(f,mx,my)=>{const bx=(mx-vw/2)/z+cx,by=(my-vh/2)/z+cy;z=Math.max(zmin(),Math.min(14,z*f));cx=bx-(mx-vw/2)/z;cy=by-(my-vh/2)/z;draw();};
-  let last=null;
-  cv.addEventListener("pointerdown",e=>{last=[e.clientX,e.clientY];cv.setPointerCapture(e.pointerId);cv.style.cursor="grabbing";});
-  cv.addEventListener("pointermove",e=>{if(!last)return;cx-=(e.clientX-last[0])/z;cy-=(e.clientY-last[1])/z;last=[e.clientX,e.clientY];draw();});
-  const up=()=>{last=null;cv.style.cursor="grab";};cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",up);
+  let last=null,hDrag=null;var hSel=null;
+  const hitLine=my=>{if(!LL)return null;let best=null,bd=14;for(const k of ["brow","nose","chin"]){const d=Math.abs((LL[k]*BH-cy)*z+vh/2-my);if(d<bd){bd=d;best=k;}}return best;};
+  cv.addEventListener("pointerdown",e=>{const r=cv.getBoundingClientRect(),my=e.clientY-r.top;const k=hitLine(my);cv.setPointerCapture(e.pointerId);
+    if(k){hDrag=k;hSel=k;cv.style.cursor="ns-resize";draw();return;}last=[e.clientX,e.clientY];cv.style.cursor="grabbing";});
+  cv.addEventListener("pointermove",e=>{const r=cv.getBoundingClientRect(),my=e.clientY-r.top;
+    if(hDrag){let v=((my-vh/2)/z+cy)/BH;const gap=.02;   // up / down only, the lines keep their order
+      if(hDrag==="brow")v=Math.min(v,LL.nose-gap);else if(hDrag==="nose")v=Math.max(LL.brow+gap,Math.min(v,LL.chin-gap));else v=Math.max(v,LL.nose+gap);
+      LL[hDrag]=Math.max(0,Math.min(1,v));draw();return;}
+    if(!last){if(LL)cv.style.cursor=hitLine(my)?"ns-resize":"grab";return;}cx-=(e.clientX-last[0])/z;cy-=(e.clientY-last[1])/z;last=[e.clientX,e.clientY];draw();});
+  const up=()=>{last=null;hDrag=null;cv.style.cursor="grab";};cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",up);
   cv.addEventListener("dblclick",e=>{const r=cv.getBoundingClientRect();zoomAt(2,e.clientX-r.left,e.clientY-r.top);});
   cv.addEventListener("wheel",e=>{e.preventDefault();const r=cv.getBoundingClientRect();zoomAt(e.deltaY<0?1.15:1/1.15,e.clientX-r.left,e.clientY-r.top);},{passive:false});
-  const key=e=>{if(e.key==="Escape")close();else if(e.key==="+"||e.key==="=")zoomAt(1.3,vw/2,vh/2);else if(e.key==="-")zoomAt(1/1.3,vw/2,vh/2);};
+  const key=e=>{if(e.key==="Escape")close();else if(e.key==="+"||e.key==="=")zoomAt(1.3,vw/2,vh/2);else if(e.key==="-")zoomAt(1/1.3,vw/2,vh/2);
+    else if(LL&&hSel&&(e.key==="ArrowUp"||e.key==="ArrowDown")){e.preventDefault();const st=(e.shiftKey?5:1)/BH*4;LL[hSel]+=e.key==="ArrowUp"?-st:st;
+      LL.brow=Math.min(LL.brow,LL.nose-.02);LL.chin=Math.max(LL.chin,LL.nose+.02);draw();}};
   document.addEventListener("keydown",key);
   const onRs=()=>{fit();draw();};window.addEventListener("resize",onRs);
   const close=()=>{document.removeEventListener("keydown",key);window.removeEventListener("resize",onRs);ov.remove();};
   const gl=ov.querySelector(".gl");if(gl)gl.onchange=draw;
-  ov.querySelectorAll("[data-z]").forEach(b=>b.onclick=()=>{const v=b.dataset.z;if(v==="in")zoomAt(1.3,vw/2,vh/2);else if(v==="out")zoomAt(1/1.3,vw/2,vh/2);else if(v==="fit"){z=zmin();cx=BW/2;cy=BH/2;draw();}else close();});
+  const saveLines=()=>{if(!LL)return;const ch=["brow","nose","chin"].some(k=>Math.abs(LL[k]-HA.lines[k])>1e-5);
+    if(ch){HA.lines=Object.assign({},HA.lines,LL);HA.linesMan=true;renderSlides();}};
+  ov.querySelectorAll("[data-z]").forEach(b=>b.onclick=()=>{const v=b.dataset.z;if(v==="in")zoomAt(1.3,vw/2,vh/2);else if(v==="out")zoomAt(1/1.3,vw/2,vh/2);else if(v==="fit"){z=zmin();cx=BW/2;cy=BH/2;draw();}
+    else if(v==="auto"){HA.lines=null;HA.linesMan=false;HA.alignKey=null;close();renderSlides();scheduleAlign();toast("رجعت الخطوط التلقائية.");}
+    else if(v==="ok"||(v==="no"&&LL)){saveLines();close();}else close();});
   draw();
 }
 /* ---------- Slide 16: Overjet / Overbite measured on the ruler photos ----------
@@ -3489,7 +3517,7 @@ function zoomHeaderLayout(ov){
   const kids=[...hd.childNodes].filter(n=>n.nodeType===1);
   const title=kids.find(e=>e.tagName==="B"),res=kids.find(e=>e.classList&&(e.classList.contains("res")||e.classList.contains("ang")));
   const help=kids.find(e=>e.tagName==="SPAN"&&e!==res&&/opacity/.test(e.getAttribute("style")||""));
-  const endKeys=new Set(["in","out","fit","ok","no"]);
+  const endKeys=new Set(["in","out","fit","ok","no","cancel"]);
   const tools=[],ends=[];
   for(const e of kids){if(e===title||e===res||e===help)continue;if(e.tagName==="SPAN"&&!e.textContent.trim())continue;
     (e.dataset&&endKeys.has(e.dataset.z)?ends:tools).push(e);}
@@ -4208,7 +4236,7 @@ async function scheduleAlign(){
         // measurement lines are taken from the final (fitted) picture
         for(const s of slots){
           const a=assign[s.id];
-          if(!a||!a.align||!isHeightsSlot(s)||a.align.mode!=="lm"||(a.lines&&a.linesTd===a.align.td))continue;
+          if(!a||!a.align||!isHeightsSlot(s)||a.align.mode!=="lm"||(a.lines&&(a.linesTd===a.align.td||a.linesMan)))continue;
           const p=photos.find(x=>x.id===a.photoId);if(!p)continue;
           const g0=G(s),turned=g0.rot===90||g0.rot===270,ar=(turned?g0.cy:g0.cx)/(turned?g0.cx:g0.cy);
           const H=1600,W=Math.round(H*ar);
@@ -4756,7 +4784,7 @@ function renderSlidesInner(){
         // first manual change: freeze the automatic fit of this photo (rotate / flip / reset hand it back to the automatic fit)
         if(act==="rot"||act==="flip"||act==="reset"||act==="vflip")a2.frozen=null;
         else if(!a2.frozen&&a2.align)a2.frozen={align:JSON.parse(JSON.stringify(a2.align)),dx:a2.dx||0,dy:a2.dy||0,zoom:a2.zoom||1};
-        a2.lines=null;a2.stick=undefined;a2.prof=undefined;
+        a2.lines=null;a2.linesMan=false;a2.stick=undefined;a2.prof=undefined;
         if(act==="rot")a2.rot=((a2.rot||0)+90)%360;
         else if(act==="flip")a2.flip=!a2.flip;
         else if(act==="vflip"){a2.rot=((a2.rot||0)+180)%360;a2.flip=!a2.flip;a2.occDone=a2.photoId;}
@@ -4834,7 +4862,7 @@ $("genBtn").onclick=async()=>{
     const waitAlign=async()=>{let n=0;while(aligning&&n++<600)await new Promise(r=>setTimeout(r,100));};
     await waitAlign();
     for(const t of slots){const a=assign[t.id];if(!a||!a.photoId||!a.align)continue;
-      if((a.stick&&(a.stickKey!==a.alignKey||a.stickTd!==a.align.td))||(a.lines&&a.linesTd!==a.align.td))a.alignKey=null;}
+      if((a.stick&&(a.stickKey!==a.alignKey||a.stickTd!==a.align.td))||(a.lines&&!a.linesMan&&a.linesTd!==a.align.td))a.alignKey=null;}
     await scheduleAlign();await waitAlign();
     status("جارٍ فتح القالب…");setBar("genBar",.02);
     const zip=await JSZip.loadAsync(tpl.file);
