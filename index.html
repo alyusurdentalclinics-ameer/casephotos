@@ -2530,7 +2530,7 @@ async function openStickZoom(s){
     <button class="btn sm" data-z="in">＋ تكبير</button><button class="btn sm" data-z="out">－ تصغير</button>
     <button class="btn sm" data-z="ok" style="background:#1f8f4e;color:#fff">✓ اعتماد</button><button class="btn sm" data-z="no">إلغاء</button></div>
     <canvas style="flex:1 1 0;width:100%;min-height:0;min-width:0;max-width:100%;display:block;cursor:grab;touch-action:none"></canvas>`;
-  document.body.appendChild(ov);
+  zoomHeaderLayout(ov);document.body.appendChild(ov);
   const cv=ov.querySelector("canvas"),g=cv.getContext("2d");
   let vw=0,vh=0,z=1,cx=(S.x1+S.x2)/2*BW,cy=(S.y1+S.y2)/2*BH,sel=2;
   const fit=()=>{const r=cv.getBoundingClientRect();vw=cv.width=Math.max(50,Math.round(r.width));vh=cv.height=Math.max(50,Math.round(r.height));};
@@ -3063,7 +3063,7 @@ async function openOccZoom(s){
     <button class="btn sm" data-z="in">＋ تكبير</button><button class="btn sm" data-z="out">－ تصغير</button>
     <button class="btn sm" data-z="ok" style="background:#1f8f4e;color:#fff">✓ اعتماد</button><button class="btn sm" data-z="no">إلغاء</button></div>
     <canvas style="flex:1 1 0;width:100%;min-height:0;min-width:0;max-width:100%;display:block;cursor:grab;touch-action:none"></canvas>`;
-  document.body.appendChild(ov);
+  zoomHeaderLayout(ov);document.body.appendChild(ov);
   const cv=ov.querySelector("canvas"),g=cv.getContext("2d");
   let selLine=null,picked=false;
   const delLines=ids=>{const o=new Set(p.occl.off||[]);ids.forEach(i=>o.add(i));p.occl.off=[...o];selLine=null;draw();};
@@ -3184,7 +3184,7 @@ async function openZoomView(s,pic,title){
     <span style="flex:1"></span>${guides?`<label style="font-size:13px"><input type="checkbox" class="gl" checked> خطوط الشريحة</label>`:""}
     <button class="btn sm" data-z="in">＋ تكبير</button><button class="btn sm" data-z="out">－ تصغير</button><button class="btn sm" data-z="fit">ملء الشاشة</button><button class="btn sm" data-z="no">✕ إغلاق</button></div>
     <canvas style="flex:1 1 0;width:100%;min-height:0;min-width:0;max-width:100%;display:block;cursor:grab;touch-action:none"></canvas>`;
-  document.body.appendChild(ov);
+  zoomHeaderLayout(ov);document.body.appendChild(ov);
   const cv=ov.querySelector("canvas"),g=cv.getContext("2d");
   let vw=0,vh=0,z=1,cx=BW/2,cy=BH/2;
   const fit=()=>{const r=cv.getBoundingClientRect();vw=cv.width=Math.max(50,Math.round(r.width));vh=cv.height=Math.max(50,Math.round(r.height));};
@@ -3481,6 +3481,30 @@ async function aiOverjetAll(signal){
 }
 /* large magnified view to place the four points by hand; the ruler distance (mm) can be typed */
 const keepOJRuler=p=>!!(p.ojob&&(p.ojob.rulerAuto||p.ojob.man||p.ojob.fromAI));
+/* zoom pages: a fixed top bar - row 1 title + result (the result box keeps its width, long text is cut with …),
+   row 2 all the buttons in one line (scrolls sideways if the screen is narrow), row 3 the help text (2 lines max).
+   Nothing moves when the result or the help text gets longer or shorter. */
+function zoomHeaderLayout(ov){
+  const hd=[...ov.children].find(e=>e.tagName==="DIV");if(!hd||hd.dataset.fixed)return;hd.dataset.fixed="1";
+  const kids=[...hd.childNodes].filter(n=>n.nodeType===1);
+  const title=kids.find(e=>e.tagName==="B"),res=kids.find(e=>e.classList&&(e.classList.contains("res")||e.classList.contains("ang")));
+  const help=kids.find(e=>e.tagName==="SPAN"&&e!==res&&/opacity/.test(e.getAttribute("style")||""));
+  const endKeys=new Set(["in","out","fit","ok","no"]);
+  const tools=[],ends=[];
+  for(const e of kids){if(e===title||e===res||e===help)continue;if(e.tagName==="SPAN"&&!e.textContent.trim())continue;
+    (e.dataset&&endKeys.has(e.dataset.z)?ends:tools).push(e);}
+  hd.innerHTML="";hd.style.cssText="display:grid;grid-template-columns:minmax(0,1fr);gap:6px;padding:8px 12px 8px 64px;color:#fff;background:#0a1014;box-sizing:border-box;flex:none;min-width:0;max-width:100%";
+  const r1=document.createElement("div");r1.style.cssText="display:flex;align-items:center;gap:10px;height:34px;min-width:0;white-space:nowrap";
+  if(title){title.style.flex="none";r1.appendChild(title);}
+  if(res){res.style.cssText+=";flex:1 1 0;min-width:0;max-width:760px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left";
+    new MutationObserver(()=>{res.title=res.textContent;}).observe(res,{childList:true,characterData:true,subtree:true});r1.appendChild(res);}
+  const r2=document.createElement("div");r2.style.cssText="display:flex;align-items:center;gap:6px;height:36px;min-width:0;white-space:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin";
+  for(const e of tools){e.style.flex="none";r2.appendChild(e);}
+  const sp=document.createElement("span");sp.style.cssText="flex:1 0 12px";r2.appendChild(sp);
+  for(const e of ends){e.style.flex="none";r2.appendChild(e);}
+  hd.appendChild(r1);hd.appendChild(r2);
+  if(help){help.style.cssText="opacity:.85;font-size:12px;line-height:18px;height:36px;overflow:hidden;display:block;min-width:0";help.title=help.textContent;hd.appendChild(help);}
+}
 async function openOJZoom(s){
   const a=assign[s.id],p=a&&photos.find(x=>x.id===a.photoId);if(!a||!p)return;const kind=ojKind(s);
   const freshOJ=!p.ojob||!p.ojob.pts;
@@ -3505,7 +3529,7 @@ async function openOJZoom(s){
     <button class="btn sm" data-z="in">＋ تكبير</button><button class="btn sm" data-z="out">－ تصغير</button>
     <button class="btn sm" data-z="ok" style="background:#1f8f4e;color:#fff">✓ اعتماد</button><button class="btn sm" data-z="no">إلغاء</button></div>
     <canvas style="flex:1 1 0;width:100%;min-height:0;min-width:0;max-width:100%;display:block;cursor:grab;touch-action:none"></canvas>`;
-  document.body.appendChild(ov);
+  zoomHeaderLayout(ov);document.body.appendChild(ov);
   const cv=ov.querySelector("canvas"),g=cv.getContext("2d"),mmIn=ov.querySelector(".mm");mmIn.value=p.ojob.mm;
   const xs=OJ_KEYS.map(k=>S[k][0]*BW),ys=OJ_KEYS.map(k=>S[k][1]*BH);
   let vw=0,vh=0,z=1,cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2,sel="u";
