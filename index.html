@@ -3304,12 +3304,12 @@ function detectRuler(src,hint){
   let angs=[],H0=null;
   if(hint&&hint.r1&&hint.r2){const hx=(hint.r2[0]-hint.r1[0])*W,hy=(hint.r2[1]-hint.r1[1])*H,hl=Math.hypot(hx,hy);
     if(hl>15){const a0=((Math.atan2(hy,hx)*180/Math.PI)%180+180)%180;for(let da=-14;da<=14;da+=1.5)angs.push(((a0+da)%180+180)%180);
-      H0={mx:(hint.r1[0]+hint.r2[0])/2*W,my:(hint.r1[1]+hint.r2[1])/2*H,len:hl};}}
+      H0={mx:(hint.r1[0]+hint.r2[0])/2*W,my:(hint.r1[1]+hint.r2[1])/2*H,len:Math.max(hl,Math.hypot(W,H)*.3),wl:hl};}}
   if(!angs.length)for(let a=0;a<180;a+=3)angs.push(a);
   for(const ang of angs){
     const th=ang*Math.PI/180,ux=Math.cos(th),uy=Math.sin(th),vx=-uy,vy=ux;
     let o0=-diag/2,o1=diag/2,ost=3;
-    if(H0){const oc=(H0.mx-cx)*vx+(H0.my-cy)*vy,w=Math.max(25,H0.len*.35);o0=oc-w;o1=oc+w;ost=1.5;}
+    if(H0){const oc=(H0.mx-cx)*vx+(H0.my-cy)*vy,w=Math.max(25,Math.min(H0.wl,Math.hypot(W,H)*.15)*.35);o0=oc-w;o1=oc+w;ost=1.5;}
     for(let off=o0;off<o1;off+=ost){
       // samples along the line (averaged over 3 neighbouring lines), keeping the grey stretches
       const sig=[],ok=[];
@@ -3348,9 +3348,13 @@ function detectRuler(src,hint){
   const mk=pts.reduce((s,q)=>s+q.k,0)/pts.length,mp=pts.reduce((s,q)=>s+q.p,0)/pts.length;
   let sxy=0,sxx=0;for(const q of pts){sxy+=(q.k-mk)*(q.p-mp);sxx+=(q.k-mk)**2;}const step=sxx?sxy/sxx:lag,p0=mp-step*mk;
   const kmax=Math.max(...pts.map(q=>q.k)),kmin=Math.min(...pts.map(q=>q.k));
-  const span=kmax-kmin>=10?10:kmax-kmin>=5?5:kmax-kmin;if(span<3)return null;
-  const k1=kmin+Math.floor((kmax-kmin-span)/2),k2=k1+span;
+  // the ruler is always read over 5 mm, on the marks nearest the start of the ruler (hint.near) when known
+  const span=5;if(kmax-kmin<span)return null;
   const toXY=p=>{const t=best.a+p;return [(cx+best.vx*best.off+best.ux*t)/W,(cy+best.vy*best.off+best.uy*t)/H];};
+  let k1=kmin+Math.floor((kmax-kmin-span)/2);
+  if(hint&&hint.near){const dn=k=>{const q=toXY(p0+step*k);return Math.hypot((q[0]-hint.near[0])*W,(q[1]-hint.near[1])*H);};
+    let bd=1e9;for(let k=kmin;k<=kmax-span;k++){const d=Math.min(dn(k),dn(k+span));if(d<bd){bd=d;k1=k;}}}
+  const k2=k1+span;
   return {r1:toXY(p0+step*k1),r2:toXY(p0+step*k2),mm:span,step:step/S,score:best.score,ends:[toXY(0),toXY(best.seg.length-1)]};   // ends = the two ends of the metal strip along the scale
 }
 /* refine the ruler points of a photo with the ruler finder (near the AI's rough ruler line when there is one) */
@@ -3361,9 +3365,9 @@ async function snapRuler(p,hint){
 /* AI: the ruler marks and the incisor points; read twice with fixed seeds, median kept */
 const OJ_PROMPT=kind=>`This intraoral photo shows the front teeth with a small metal measuring RULER (steel strip with graduation marks in millimetres) held against them to measure the ${kind==="oj"?"OVERJET (horizontal distance between the upper and lower incisors; the ruler lies horizontally)":"OVERBITE (vertical overlap of the upper incisor over the lower incisor; the ruler stands vertically)"}.
 Give as [y, x] normalized 0-1000:
-- r1 and r2: two CLEAR graduation marks of the ruler, as far apart as you can read reliably, and mm = the number of millimetres between them (count the marks; on most such rulers the small marks are 1 mm apart and longer marks every 5 mm).
+- r1 and r2: two CLEAR graduation marks of the ruler exactly 5 mm apart (5 small 1-mm steps), the ones nearest the tip / start of the ruler, and mm = 5.
 ${kind==="oj"?`- u: the START of the ruler = the END (tip) of the metal ruler strip, where its scale begins; the tip rests against the LABIAL surface of the LOWER central incisor (tooth 31 / 41). Give the tip point.
-- l: on the ruler, the point level with the INCISAL EDGE of the UPPER central incisor (tooth 11): the most forward (labial) point of the upper incisor's edge, where it lies over the ruler.`:`- u: the START of the ruler = the END (tip) of the metal ruler strip, where its scale begins, at the upper incisor (the ruler is placed with its end at the upper incisor: this end is the upper incisor reference, "U1 edge").
+- l: the INCISAL EDGE of the UPPER central incisor (tooth 11): the tip of its edge, its most forward (labial) incisal point, on the tooth itself just above the ruler.`:`- u: the START of the ruler = the END (tip) of the metal ruler strip, where its scale begins, at the upper incisor (the ruler is placed with its end at the upper incisor: this end is the upper incisor reference, "U1 edge").
 - l: on the ruler, the point where the HIGHEST (most incisal) point of the LOWER front (central) incisor meets the ruler - the top of the lower incisor crown where it touches / lies against the ruler.`}
 - front: "left" if the incisors / face point to the left of the image, "right" if to the right.
 Reply with only JSON: {"r1":[y,x],"r2":[y,x],"mm":10,"u":[y,x],"l":[y,x],"front":"left"}`;
@@ -3382,12 +3386,13 @@ async function aiOverjet(p,kind,signal){
     const P={};for(const k of OJ_KEYS)P[k]=[median(reads.map(r=>r.pts[k][0])),median(reads.map(r=>r.pts[k][1]))];
     p.ojob={pts:P,mm:median(reads.map(r=>r.mm)),front:reads[0].front,man:false,fromAI:true};
     // the graduations themselves fix the scale more exactly than the AI's two points
-    try{const R=await snapRuler(p,{r1:P.r1,r2:P.r2});if(R){p.ojob.pts.r1=R.r1;p.ojob.pts.r2=R.r2;p.ojob.mm=R.mm;p.ojob.rulerAuto=true;
+    {const O=p.ojob;if(O.mm>0&&O.mm!==5){const f=5/O.mm;O.pts.r2=[O.pts.r1[0]+(O.pts.r2[0]-O.pts.r1[0])*f,O.pts.r1[1]+(O.pts.r2[1]-O.pts.r1[1])*f];O.mm=5;}}   // always 5 mm
+    try{const R=await snapRuler(p,{r1:P.r1,r2:P.r2,near:P.u});if(R){p.ojob.pts.r1=R.r1;p.ojob.pts.r2=R.r2;p.ojob.mm=R.mm;p.ojob.rulerAuto=true;
         // U1 = the start (end) of the ruler: the strip end nearest the AI's point (or nearest the lower incisor)
         if(R.ends){const W=p.prev.width,H=p.prev.height,d=(A,B)=>Math.hypot((A[0]-B[0])*W,(A[1]-B[1])*H),rl=d(R.r1,R.r2)/(R.mm||1);
           const e=R.ends.slice().sort((A,B)=>d(A,P.u)-d(B,P.u))[0];
-          if(d(e,P.u)<rl*6)p.ojob.pts.u=e;}}}catch(e){console.warn(e);}
-    p.ojob.v=3;
+          if(d(e,P.u)<rl*1.5)p.ojob.pts.u=e;}}}catch(e){console.warn(e);}
+    p.ojob.v=4;
     return true;
   }catch(e){if(!(e&&e.code==="cancelled"))p.ojFail="خطأ بالاتصال بالذكاء الاصطناعي: "+(typeof aiErrorText==="function"?aiErrorText(e):String(e&&e.message||e));throw e;}
   finally{p.ojBusy=false;}
@@ -3405,7 +3410,7 @@ async function openOJZoom(s){
   const a=assign[s.id],p=a&&photos.find(x=>x.id===a.photoId);if(!a||!p)return;const kind=ojKind(s);
   const freshOJ=!p.ojob||!p.ojob.pts;
   if(!p.ojob||!p.ojob.pts){const T=(u,v)=>turnedToRaw(p,a.rot,a.flip,u,v);
-    p.ojob={pts:kind==="oj"?{r1:T(.35,.62),r2:T(.65,.62),u:T(.45,.6),l:T(.52,.6)}:{r1:T(.6,.3),r2:T(.6,.7),u:T(.5,.5),l:T(.5,.45)},mm:10,front:-1,man:true,v:3};}
+    p.ojob={pts:kind==="oj"?{r1:T(.35,.62),r2:T(.65,.62),u:T(.45,.6),l:T(.52,.6)}:{r1:T(.6,.3),r2:T(.6,.7),u:T(.5,.5),l:T(.5,.45)},mm:5,front:-1,man:true,v:4};}
   if(freshOJ){try{const R=await snapRuler(p,null);if(R){p.ojob.pts.r1=R.r1;p.ojob.pts.r2=R.r2;p.ojob.mm=R.mm;p.ojob.rulerAuto=true;}}catch(e){console.warn(e);}}
   const fr=frameRect(s),ar=fr.w/fr.h,BW=3000,BH=Math.round(BW/ar);
   let full=null;try{full=await createImageBitmap(p.file,{imageOrientation:"from-image"});}catch(_){}
@@ -3458,7 +3463,7 @@ async function openOJZoom(s){
   ov.querySelectorAll("[data-z]").forEach(b=>b.onclick=()=>{const v=b.dataset.z;if(v==="in")zoomAt(1.3,vw/2,vh/2);else if(v==="out")zoomAt(1/1.3,vw/2,vh/2);
     else if(v==="flip"){p.ojob.front=-(p.ojob.front||1);draw();}
     else if(v==="ruler"){b.disabled=true;b.textContent="⏳ جارٍ البحث…";writeBack();
-      (async()=>{let R=await snapRuler(p,{r1:p.ojob.pts.r1,r2:p.ojob.pts.r2});if(!R)R=await snapRuler(p,null);
+      (async()=>{let R=await snapRuler(p,{r1:p.ojob.pts.r1,r2:p.ojob.pts.r2,near:p.ojob.pts.u});if(!R)R=await snapRuler(p,{near:p.ojob.pts.u});
         if(R){p.ojob.pts.r1=R.r1;p.ojob.pts.r2=R.r2;p.ojob.mm=R.mm;mmIn.value=R.mm;const F=ojPtsFrame(p,a,map);S.r1=F.r1.slice();S.r2=F.r2.slice();toast(`وُجدت المسطرة: نقطتان على علامتين بينهما ${R.mm} ملم — تأكد من العدد.`);}
         else toast("لم أجد علامات المسطرة بوضوح — ضع نقطتي المسطرة يدوياً على علامتين.");
         b.disabled=false;b.textContent="📐 كشف المسطرة";draw();})();}
@@ -4474,7 +4479,7 @@ let ojWatchBusy=false;
 async function ojWatch(){
   if(ojWatchBusy||aiCtl||!aiReady())return;
   const todo=[];for(const s of slots){if(!isOJSlot(s))continue;const a=assign[s.id],p=a&&a.photoId&&photos.find(x=>x.id===a.photoId);
-    if(!p||p.ojBusy||(p.ojob&&p.ojob.man)||(p.ojob&&p.ojob.v===3)||p.ojAutoTried===ojKind(s))continue;todo.push([s,p]);}
+    if(!p||p.ojBusy||(p.ojob&&p.ojob.man)||(p.ojob&&p.ojob.v===4)||p.ojAutoTried===ojKind(s))continue;todo.push([s,p]);}
   if(!todo.length)return;ojWatchBusy=true;
   try{for(const [s,p] of todo){p.ojAutoTried=ojKind(s);renderSlides();
       try{await aiOverjet(p,ojKind(s),new AbortController().signal);}catch(e){console.warn(e);}renderSlides();}}
