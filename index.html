@@ -2534,7 +2534,7 @@ async function openStickZoom(s){
   const cv=ov.querySelector("canvas"),g=cv.getContext("2d");
   let vw=0,vh=0,z=1,cx=(S.x1+S.x2)/2*BW,cy=(S.y1+S.y2)/2*BH,sel=2;
   const fit=()=>{const r=cv.getBoundingClientRect();vw=cv.width=Math.max(50,Math.round(r.width));vh=cv.height=Math.max(50,Math.round(r.height));};
-  fit();{const len=Math.hypot((S.x2-S.x1)*BW,(S.y2-S.y1)*BH)||BW*.5;z=Math.min(vw/(len*1.25),vh/(len*.55));}
+  fit();z=Math.min(vw/BW,vh/BH);cx=BW/2;cy=BH/2;   // opens with the whole picture fitted to the screen
   const zmin=()=>Math.min(vw/BW,vh/BH);
   const toScr=(fx,fy)=>[(fx*BW-cx)*z+vw/2,(fy*BH-cy)*z+vh/2],toFr=(sx,sy)=>[((sx-vw/2)/z+cx)/BW,((sy-vh/2)/z+cy)/BH];
   const angTxt=()=>{const tl=stickTiltOf(s,S);return "Canting: "+Math.abs(tl-S.eyeTilt).toFixed(2)+"\u00B0";};
@@ -3070,7 +3070,7 @@ async function openOccZoom(s){
   const xs=OCC_KEYS.map(k=>S[k][0]*BW),ys=OCC_KEYS.map(k=>S[k][1]*BH);
   let vw=0,vh=0,z=1,cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2,sel="u3";
   const fit=()=>{const r=cv.getBoundingClientRect();vw=cv.width=Math.max(50,Math.round(r.width));vh=cv.height=Math.max(50,Math.round(r.height));};
-  fit();z=Math.min(vw/((Math.max(...xs)-Math.min(...xs))*1.4||BW),vh/((Math.max(...ys)-Math.min(...ys))*3||BH),6);
+  fit();z=Math.min(vw/BW,vh/BH);cx=BW/2;cy=BH/2;   // opens with the whole picture fitted to the screen
   const zmin=()=>Math.min(vw/BW,vh/BH);
   const toScr=(fx,fy)=>[(fx*BW-cx)*z+vw/2,(fy*BH-cy)*z+vh/2],toFr=(sx,sy)=>[((sx-vw/2)/z+cx)/BW,((sy-vh/2)/z+cy)/BH];
   const writeBack=()=>{for(const k of OCC_KEYS){const t=inv(S[k][0],S[k][1]);p.occl.pts[k]=turnedToRaw(p,a.rot,a.flip,t[0],t[1]);}};
@@ -3578,7 +3578,7 @@ async function openOJZoom(s){
   const xs=OJ_KEYS.map(k=>S[k][0]*BW),ys=OJ_KEYS.map(k=>S[k][1]*BH);
   let vw=0,vh=0,z=1,cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2,sel="u";
   const fit=()=>{const r=cv.getBoundingClientRect();vw=cv.width=Math.max(50,Math.round(r.width));vh=cv.height=Math.max(50,Math.round(r.height));};
-  fit();z=Math.max(Math.min(vw/BW,vh/BH),Math.min(vw/((Math.max(...xs)-Math.min(...xs))*1.6||BW),vh/((Math.max(...ys)-Math.min(...ys))*1.6||BH),8));
+  fit();z=Math.min(vw/BW,vh/BH);cx=BW/2;cy=BH/2;   // opens with the whole picture fitted to the screen
   const zmin=()=>Math.min(vw/BW,vh/BH);
   const toScr=(fx,fy)=>[(fx*BW-cx)*z+vw/2,(fy*BH-cy)*z+vh/2],toFr=(sx,sy)=>[((sx-vw/2)/z+cx)/BW,((sy-vh/2)/z+cy)/BH];
   const writeBack=()=>{for(const k of OJ_KEYS){const t=inv(S[k][0],S[k][1]);p.ojob.pts[k]=turnedToRaw(p,a.rot,a.flip,t[0],t[1]);}p.ojob.mm=+mmIn.value||p.ojob.mm;};
