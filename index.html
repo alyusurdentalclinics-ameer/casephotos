@@ -939,10 +939,11 @@ async function archUpload(blob,meta){
 async function archDownload(id){
   // 1 MB parts (big replies through the Apps Script web app can come back empty / broken), fetched 6 at a time
   const inf=await archCall("info",{id,cs:1048576}),N=inf.chunks,parts=new Array(N);
-  const CH=inf.cs||4*1048576,PAR=Math.min(6,N);let done=0,next=0,stop=null;const t0=Date.now();
+  const CH=inf.cs||4*1048576,PAR=Math.min(4,N);let done=0,next=0,stop=null;const t0=Date.now();const failed=[];
   const one=async i=>{
     const want=Math.min(CH,inf.size-i*CH);let err=null;
-    for(let tr=0;tr<4;tr++){
+    const tries=one.slow?6:4;
+    for(let tr=0;tr<tries;tr++){
       if(stop)return;
       try{const j=await archCall("get",{id,i,cs:CH});let x=b64ToBytes(j.data,(i+1)+"/"+N);
         if(inf.size&&x.length===inf.size&&N>1)x=x.subarray(i*CH,i*CH+want);   // Drive ignored the Range: whole file came back
@@ -951,10 +952,13 @@ async function archDownload(id){
         parts[i]=x;done++;setBar("archBar",done/N);
         const sec=(Date.now()-t0)/1000,left=Math.round(sec/done*(N-done));
         archMsg(`جارٍ التنزيل من الأرشيف… ${arNum(done)} / ${arNum(N)}${N-done>0&&done>=PAR?` — باقي تقريباً ${arNum(left)} ثانية`:""}`);return;}
-      catch(e){err=e;if(e&&e.code)break;await sleep(700*(tr+1));}}
+      catch(e){err=e;if(e&&e.code&&e.code!=="drive")break;await sleep((one.slow?2500:800)*(tr+1));}}
+    if(err&&err.code&&err.code!=="drive"){stop=stop||err;return;}
+    if(!one.slow){failed.push(i);return;}            // tried again later, slowly, one at a time
     stop=stop||err||new Error("تعذّر تنزيل الجزء "+(i+1));
   };
   await Promise.all(Array.from({length:PAR},async()=>{while(!stop&&next<N)await one(next++);}));
+  if(!stop&&failed.length){one.slow=true;archMsg(`إعادة تنزيل ${arNum(failed.length)} جزء تعذّر…`);for(const i of failed){if(stop)break;await one(i);}}
   if(stop)throw stop;
   const tot=parts.reduce((a,b)=>a+b.length,0);if(inf.size&&tot!==inf.size)throw new Error("حجم الملف المنزَّل غير مطابق ("+tot+" من "+inf.size+") — أعد المحاولة.");
   setBar("archBar",null);return {name:inf.fileName,blob:new Blob(parts,{type:/\.cpstate$/i.test(inf.fileName||"")?"application/zip":PPTX_MIME})};
@@ -995,9 +999,25 @@ async function archFind(){
       finally{ARCH.busy=false;setBar("archBar",null);archRender();}});}
   catch(e){archMsg(e.message,true);}
 }
+/* the platform template is kept on this device (IndexedDB): the next time it opens at once, without downloading,
+   as long as the platform still has the same file (same name and size) */
+const tplDB=()=>new Promise((res,rej)=>{const q=indexedDB.open("cp_tpl",1);q.onupgradeneeded=()=>q.result.createObjectStore("t");q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});
+async function tplCacheGet(){try{const db=await tplDB();return await new Promise(r=>{const q=db.transaction("t").objectStore("t").get("tpl");q.onsuccess=()=>r(q.result||null);q.onerror=()=>r(null);});}catch(_){return null;}}
+async function tplCachePut(v){try{const db=await tplDB();await new Promise(r=>{const t=db.transaction("t","readwrite");t.objectStore("t").put(v,"tpl");t.oncomplete=r;t.onerror=r;});}catch(_){}}
 async function archLoadTemplate(silent){
   if(!ARCH.tplInfo||ARCH.busy)return;ARCH.busy=true;archRender();if(!silent)archMsg("جارٍ تحميل قالب المنصة…");
-  try{const f=await archDownload("__template__");await loadTemplateFile(new File([f.blob],f.name||"قالب.pptx",{type:PPTX_MIME}));archMsg("✓ استُعمل قالب المنصة: "+(ARCH.tplInfo.name||""));}
+  try{
+    let inf=null;try{inf=await archCall("info",{id:"__template__",cs:1048576});}catch(e){if(e&&e.code)throw e;}
+    const c=await tplCacheGet();let f;
+    if(c&&c.blob&&(!inf||(c.name===inf.fileName&&c.size===inf.size))){f={name:c.name,blob:c.blob};}
+    else{f=await archDownload("__template__");await tplCachePut({name:f.name,size:f.blob.size,blob:f.blob});}
+    await loadTemplateFile(new File([f.blob],f.name||"قالب.pptx",{type:PPTX_MIME}));
+    // the admin's platform template is replaced by the lighter copy once (the next downloads are a few parts only)
+    if(tpl&&tpl.shrunk&&ARCH.user&&ARCH.user.role==="admin"){
+      archMsg(`جارٍ حفظ نسخة أخف من القالب بالمنصة (${(tpl.shrunk.to/1048576).toFixed(1)} بدل ${(tpl.shrunk.from/1048576).toFixed(1)} ميگابايت)…`);
+      try{await archUpload(tpl.file,{patient:"__template__",fileName:tpl.name,kind:"template"});await tplCachePut({name:tpl.name,size:tpl.file.size,blob:tpl.file});
+        await archTplInfo();}catch(e){console.warn("tpl re-save",e);}}
+    archMsg("✓ استُعمل قالب المنصة: "+(ARCH.tplInfo&&ARCH.tplInfo.name||f.name||""));}
   catch(e){archMsg("تعذّر تحميل قالب المنصة: "+e.message,true);}
   finally{ARCH.busy=false;setBar("archBar",null);archRender();}
 }
@@ -1007,7 +1027,7 @@ $("archFind").onclick=archFind;
 $("archQ").addEventListener("keydown",e=>{if(e.key==="Enter")archFind();});
 $("archQ").addEventListener("change",()=>{if($("archQ").value)archFind();});
 $("archTplSave").onclick=async()=>{if(!tpl||ARCH.busy)return;ARCH.busy=true;archRender();archMsg("جارٍ حفظ القالب بالمنصة…");
-  try{await archUpload(tpl.file,{patient:"__template__",fileName:tpl.name,kind:"template"});await archTplInfo();archMsg("✓ حُفظ القالب بالمنصة — يُستعمل تلقائياً عند الدخول.");}
+  try{await archUpload(tpl.file,{patient:"__template__",fileName:tpl.name,kind:"template"});await tplCachePut({name:tpl.name,size:tpl.file.size,blob:tpl.file});await archTplInfo();archMsg("✓ حُفظ القالب بالمنصة — يُستعمل تلقائياً عند الدخول.");}
   catch(e){archMsg("تعذّر حفظ القالب: "+e.message,true);}finally{ARCH.busy=false;setBar("archBar",null);archRender();}};
 $("archTplLoad").onclick=()=>archLoadTemplate(false);
 $("archUrl").value=archCfg.url;$("archClient").value=archCfg.client;
