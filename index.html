@@ -3271,7 +3271,7 @@ function ojResult(p,a,kind){
   // v3+ points: u = start of the ruler at the lower incisor (31), l = edge of the upper incisor (21) at the ruler
   //   → overjet = how far 11 lies in front of the ruler start; older points: u = upper edge, l = lower incisor
   // v15+: U1 edge = highest point of 21 with the ruler, L1 = start of the ruler at 31 (names as the clinic uses them)
-  if(O.v>=15)return {v:((U[0]-L[0])*ax+(U[1]-L[1])*ay)*s*mmpx,mmpx};
+  if(O.v>=15){const sh=Math.sign(fx)||s*Math.sign(ax)||1;return {v:(U[0]-L[0])*sh*mmpx,mmpx};}   // v15+: read straight across (horizontal), not along the slant of the ruler; the ruler gives the scale
   if(O.v>=3)return {v:((L[0]-U[0])*ax+(L[1]-U[1])*ay)*s*mmpx,mmpx};
   return {v:((U[0]-L[0])*ax+(U[1]-L[1])*ay)*s*mmpx,mmpx};
 }
@@ -3306,7 +3306,7 @@ function ojRulerGeom(F){let ax=F.r2[0]-F.r1[0],ay=F.r2[1]-F.r1[1];const len=Math
 function drawOJ(g,F,kind,opt){
   opt=opt||{};const lw=opt.lw||2,r=opt.r||6;g.save();g.lineCap="round";
   let ax=F.r2[0]-F.r1[0],ay=F.r2[1]-F.r1[1];const len=Math.hypot(ax,ay)||1;ax/=len;ay/=len;
-  if(kind==="ob"){ax=0;ay=1;}   // overbite: U1-L1 is read straight up-down, whatever the slant of the ruler
+  if(kind==="ob"){ax=0;ay=1;}else{ax=1;ay=0;}   // overbite: U1-L1 straight up-down; overjet: straight across - whatever the slant of the ruler
   const nx=-ay,ny=ax;
   // the ruler marks are for measuring only: drawn in the zoom, not on the photo / slide
   if(opt.ruler!==false){
@@ -3654,10 +3654,9 @@ function addOJShapes(doc,s,p,map){
     tree.appendChild(doc.importNode(parseXml(xml).documentElement,true));}
   if(!st.ok||!map)return;
   const a=assign[s.id],Fr=ojPtsFrame(p,a,map);if(!Fr)return;const f=frameRect(s),F={};for(const k of OJ_KEYS)F[k]=[f.left+Fr[k][0]*f.w,f.top+Fr[k][1]*f.h];
-  let ax=F.r2[0]-F.r1[0],ay=F.r2[1]-F.r1[1];const len=Math.hypot(ax,ay)||1;ax/=len;ay/=len;
+  // overjet straight across, overbite straight up-down (not along the ruler); the ruler marks are not put on the slide
+  const ax=kind==="ob"?0:1,ay=kind==="ob"?1:0;
   const mx=(F.u[0]+F.l[0])/2,my=(F.u[1]+F.l[1])/2,pr=P=>{const t=(P[0]-mx)*ax+(P[1]-my)*ay;return [mx+ax*t,my+ay*t];},pu=pr(F.u),pl=pr(F.l);
-  {const RG=ojRulerGeom(F);setSegLine(newLine(doc,tag+" r1",15875,"FF9F1A"),F.r1[0],F.r1[1],RG.e1[0],RG.e1[1]);setSegLine(newLine(doc,tag+" r2",15875,"FF9F1A"),F.r2[0],F.r2[1],RG.e2[0],RG.e2[1]);
-   setSegLine(newLine(doc,tag+" rbar",25400,"FF2A2A"),RG.e1[0],RG.e1[1],RG.e2[0],RG.e2[1]);}
   setSegLine(newLine(doc,tag+" u",19050,"FFD800"),F.u[0],F.u[1],pu[0],pu[1]);
   setSegLine(newLine(doc,tag+" l",19050,"20D0F0"),F.l[0],F.l[1],pl[0],pl[1]);
   setSegLine(newLine(doc,tag+" bar",31750,"FF2A2A"),pu[0],pu[1],pl[0],pl[1]);
