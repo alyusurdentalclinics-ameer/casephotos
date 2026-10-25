@@ -3529,7 +3529,13 @@ function zoomHeaderLayout(ov){
   const de=document.documentElement,prevO=de.style.overflow,prevB=document.body.style.overflow;de.style.overflow="hidden";document.body.style.overflow="hidden";
   const mo=new MutationObserver(()=>{if(!ov.isConnected){de.style.overflow=prevO;document.body.style.overflow=prevB;mo.disconnect();}});
   setTimeout(()=>mo.observe(document.body,{childList:true}),0);
-  const hd=[...ov.children].find(e=>e.tagName==="DIV");if(!hd||hd.dataset.fixed)return;hd.dataset.fixed="1";
+  // the picture sits in its own box that fills exactly the space under the bar - it can never push the bar off the screen
+  ov.style.display="flex";ov.style.flexDirection="column";ov.style.overflow="hidden";
+  {const cv=ov.querySelector("canvas");if(cv&&!cv.parentElement.dataset.cvbox){const box=document.createElement("div");box.dataset.cvbox="1";
+    box.style.cssText="position:relative;flex:1 1 0;min-height:0;min-width:0;overflow:hidden";cv.replaceWith(box);box.appendChild(cv);
+    cv.style.position="absolute";cv.style.inset="0";cv.style.width="100%";cv.style.height="100%";cv.style.display="block";cv.style.flex="none";cv.style.minHeight="0";}}
+  ov.addEventListener("scroll",()=>{if(ov.scrollTop||ov.scrollLeft){ov.scrollTop=0;ov.scrollLeft=0;}});
+  const hd=[...ov.children].find(e=>e.tagName==="DIV"&&!e.dataset.cvbox);if(!hd||hd.dataset.fixed)return;hd.dataset.fixed="1";
   const kids=[...hd.childNodes].filter(n=>n.nodeType===1);
   const title=kids.find(e=>e.tagName==="B"),res=kids.find(e=>e.classList&&(e.classList.contains("res")||e.classList.contains("ang")));
   const help=kids.find(e=>e.tagName==="SPAN"&&e!==res&&/opacity/.test(e.getAttribute("style")||""));
