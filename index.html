@@ -3271,7 +3271,10 @@ function ojResult(p,a,kind){
   // v3+ points: u = start of the ruler at the lower incisor (31), l = edge of the upper incisor (21) at the ruler
   //   → overjet = how far 11 lies in front of the ruler start; older points: u = upper edge, l = lower incisor
   // v15+: U1 edge = highest point of 21 with the ruler, L1 = start of the ruler at 31 (names as the clinic uses them)
-  if(O.v>=15){const sh=Math.sign(fx)||s*Math.sign(ax)||1;return {v:(U[0]-L[0])*sh*mmpx,mmpx};}   // v15+: read straight across (horizontal), not along the slant of the ruler; the ruler gives the scale
+  // v15+: read straight across (horizontal), not along the slant of the ruler; the ruler gives the scale.
+  //   L1 = start (tip) of the ruler at 31; the ruler body runs from there along the lower incisor's labial face,
+  //   so U1 edge (21) lying over the ruler body = positive overjet, lying beyond the ruler tip = reverse overjet.
+  if(O.v>=15){const bx=(R1[0]+R2[0])/2-L[0];const sh=Math.abs(bx)>2?Math.sign(bx):(Math.sign(fx)||1);return {v:(U[0]-L[0])*sh*mmpx,mmpx};}
   if(O.v>=3)return {v:((L[0]-U[0])*ax+(L[1]-U[1])*ay)*s*mmpx,mmpx};
   return {v:((U[0]-L[0])*ax+(U[1]-L[1])*ay)*s*mmpx,mmpx};
 }
@@ -3310,11 +3313,12 @@ function drawOJ(g,F,kind,opt){
   const nx=-ay,ny=ax;
   // the ruler marks are for measuring only: drawn in the zoom, not on the photo / slide
   if(opt.ruler!==false){
-  g.strokeStyle="rgba(255,255,255,.95)";g.lineWidth=lw;g.setLineDash([6,4]);g.beginPath();g.moveTo(...F.r1);g.lineTo(...F.r2);g.stroke();g.setLineDash([]);
-  // each ruler mark: a line square to the ruler (to lay it exactly on the graduation), joined by a red bar = the known mm
-  {const R=ojRulerGeom(F);g.strokeStyle="#FF9F1A";g.lineWidth=lw;for(const [a0,b0] of [[F.r1,R.e1],[F.r2,R.e2]]){g.beginPath();g.moveTo(...a0);g.lineTo(...b0);g.stroke();}
-   g.strokeStyle="#FF2A2A";g.lineWidth=lw*1.6;g.beginPath();g.moveTo(...R.e1);g.lineTo(...R.e2);g.stroke();
-   if(opt.mm){const fs=opt.fs||12;g.font=`bold ${fs}px sans-serif`;g.textAlign="center";g.textBaseline="top";g.direction="ltr";const t=opt.mm+" mm",mx0=(R.e1[0]+R.e2[0])/2,my0=(R.e1[1]+R.e2[1])/2+4;
+  // the ruler marks lie ON the ruler: each mark is a line along its graduation (square to the ruler, centred on the point),
+  // and the red bar of the known mm runs on the ruler itself between the two marks
+  {const L0=Math.hypot(F.r2[0]-F.r1[0],F.r2[1]-F.r1[1])||1,ux=(F.r2[0]-F.r1[0])/L0,uy=(F.r2[1]-F.r1[1])/L0,qx=-uy,qy=ux,h=Math.max(L0*.12,6);
+   g.strokeStyle="#FF9F1A";g.lineWidth=lw;for(const P of [F.r1,F.r2]){g.beginPath();g.moveTo(P[0]-qx*h,P[1]-qy*h);g.lineTo(P[0]+qx*h,P[1]+qy*h);g.stroke();}
+   g.strokeStyle="#FF2A2A";g.lineWidth=lw*1.6;g.beginPath();g.moveTo(...F.r1);g.lineTo(...F.r2);g.stroke();
+   if(opt.mm){const fs=opt.fs||12;g.font=`bold ${fs}px sans-serif`;g.textAlign="center";g.textBaseline="middle";g.direction="ltr";const t=opt.mm+" mm",mx0=(F.r1[0]+F.r2[0])/2+(Math.abs(qx)>=Math.abs(qy)?Math.sign(qx||1)*(h+fs*1.6):0),my0=(F.r1[1]+F.r2[1])/2+(Math.abs(qx)>=Math.abs(qy)?0:Math.sign(qy||1)*(h+fs*.9));
      g.lineWidth=3;g.strokeStyle="rgba(0,0,0,.6)";g.strokeText(t,mx0,my0);g.fillStyle="#fff";g.fillText(t,mx0,my0);g.textAlign="left";}}
   }
   // the projections of the two incisor points on a line parallel to the ruler, through the middle of the two points
