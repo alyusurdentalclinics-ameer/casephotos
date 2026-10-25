@@ -230,7 +230,7 @@ aside.pool h3,.arch-h h2,.step h2{color:var(--ink)}
     <div class="step" id="st3">
       <h2><span class="n">٣</span>التوزيع بالذكاء الاصطناعي</h2>
       <p>يفحص كل صورة ويحدد نوعها ثم يملأ الإطارات (يحتاج إنترنت).</p>
-      <details id="aiSettings"><summary style="cursor:pointer;font-size:13px;font-weight:700">إعدادات الذكاء الاصطناعي <span id="provName" class="mono"></span></summary>
+      <details id="aiSettings" hidden><summary style="cursor:pointer;font-size:13px;font-weight:700">إعدادات الذكاء الاصطناعي <span id="provName" class="mono"></span></summary>
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
           <div class="seg" role="radiogroup" aria-label="مزوّد الذكاء الاصطناعي">
             <label><input type="radio" name="prov" value="gemini"> Gemini</label>
@@ -244,6 +244,7 @@ aside.pool h3,.arch-h h2,.step h2{color:var(--ink)}
           <button class="btn sm" id="useOrGemini" type="button" hidden>استخدام Gemini عبر OpenRouter</button>
         </div>
       </details>
+      <div class="hint-s" id="aiSheetNote" hidden></div>
       <div class="row"><button class="btn primary" id="aiBtn" type="button" disabled>وزّع الصور</button><button class="btn sm" id="aiStop" type="button" hidden>إيقاف</button></div>
       <div class="status" id="aiStatus">يحتاج صورًا أولًا.</div>
       <div class="bar" id="aiBar" hidden><i></i></div>
@@ -907,9 +908,9 @@ async function archInit(){
   if(ARCH.token)await archWho();else google.accounts.id.prompt();
 }
 async function archWho(){
-  try{const j=await archCall("me");ARCH.user=j.user;archMsg("");await archNames();await archTplInfo();
+  try{const j=await archCall("me");ARCH.user=j.user;applySheetAI(j.user&&j.user.aiKey);archMsg("");await archNames();await archTplInfo();
     if(!tpl&&ARCH.tplInfo)archLoadTemplate(true);}
-  catch(e){ARCH.user=null;archMsg(e.message,true);}
+  catch(e){ARCH.user=null;if(SHEET_AI)applySheetAI(null);archMsg(e.message,true);}
   archRender();
 }
 function archMsg(t,bad){const el=$("archStatus");el.textContent=t||"";el.style.color=bad?"#B00000":"";}
@@ -1000,7 +1001,7 @@ async function archLoadTemplate(silent){
   catch(e){archMsg("تعذّر تحميل قالب المنصة: "+e.message,true);}
   finally{ARCH.busy=false;setBar("archBar",null);archRender();}
 }
-/*__ARCH_BIND__*/$("archOut").onclick=()=>{ARCH.user=null;ARCH.token=null;try{sessionStorage.removeItem("cp_idtoken");google.accounts.id.disableAutoSelect();}catch(_){}archMsg("");archRender();};
+/*__ARCH_BIND__*/$("archOut").onclick=()=>{ARCH.user=null;applySheetAI(null);ARCH.token=null;try{sessionStorage.removeItem("cp_idtoken");google.accounts.id.disableAutoSelect();}catch(_){}archMsg("");archRender();};
 $("archSave").onclick=archSaveLast;
 $("archFind").onclick=archFind;
 $("archQ").addEventListener("keydown",e=>{if(e.key==="Enter")archFind();});
@@ -1148,7 +1149,7 @@ stRenderList().then(stButtons);
 
 /* ---------- AI ---------- */
 const PROVIDERS={
-  gemini:{name:"Gemini",model:"gemini-3.8-flash",keyPh:"مفتاح Gemini من Google AI Studio (AIza...)",hint:"المفتاح من aistudio.google.com ← Get API key."},
+  gemini:{name:"Gemini",model:"gemini-3.5-flash-lite",keyPh:"مفتاح Gemini من Google AI Studio (AIza...)",hint:"المفتاح من aistudio.google.com ← Get API key."},
   openrouter:{name:"OpenRouter",model:"anthropic/claude-sonnet-4.5",keyPh:"مفتاح OpenRouter (sk-or-...)",hint:"المفتاح من openrouter.ai ← Keys. يمكن استخدام Gemini عبره أيضًا مثل google/gemini-3.8-flash"}
 };
 let settings={};try{settings=JSON.parse(localStorage.getItem("cp_settings")||"{}")||{};}catch(_){settings={};}
@@ -1156,7 +1157,20 @@ let settings={};try{settings=JSON.parse(localStorage.getItem("cp_settings")||"{}
 if(settings.key&&!settings.keys){settings.keys={openrouter:settings.key};settings.models={openrouter:settings.model};settings.provider="openrouter";}
 settings.keys=settings.keys||{};settings.models=settings.models||{};
 settings.provider=PROVIDERS[settings.provider]?settings.provider:"gemini";   // a removed provider (e.g. the offline one) falls back to Gemini
-const curProv=()=>settings.provider;
+/* the Gemini key of the signed-in user, kept in the Users sheet of the platform (column gemini_key):
+   while it is there every request goes to Gemini with the two clinic models (the 2nd one when the 1st is busy / unreachable) */
+let SHEET_AI=null;
+const AI_M1="gemini-3.5-flash-lite",AI_M2="gemini-3.1-flash-lite";
+const curProv=()=>"gemini";
+const gemKey=()=>SHEET_AI?SHEET_AI.key:"";
+function aiNote(){const n=$("aiSheetNote");if(!n)return;n.hidden=false;
+  n.innerHTML=SHEET_AI?`🔑 Gemini بمفتاح حسابك من المنصة · <span class="mono">${AI_M1}</span> ← عند الانشغال <span class="mono">${AI_M2}</span>`
+    :ARCH&&ARCH.user?"⚠️ لا يوجد مفتاح Gemini لحسابك بورقة Users (عمود gemini_key) — اطلب من المدير إضافته.":"🔑 "+"سجّل الدخول بالمنصة (☁️ أرشيف المرضى) حتى يُستعمل مفتاح Gemini الخاص بحسابك من ورقة Users.";}
+function applySheetAI(key){
+  SHEET_AI=key?{key:String(key).trim()}:null;
+  aiNote();
+  try{renderAll();}catch(_){}
+}
 /* the model may be typed as its display name ("Gemini 3.5 Flash Lite"): turn it into the API name (gemini-3.5-flash-lite) */
 function normModel(pv,v){
   v=String(v||"").trim().replace(/^models\//,"");if(!v)return "";
@@ -1174,8 +1188,8 @@ function showProvider(){
 }
 showProvider();
 document.querySelectorAll('input[name=prov]').forEach(r=>r.addEventListener("change",()=>{settings.provider=r.value;showProvider();}));
-if(!settings.keys[curProv()])$("aiSettings").open=true;
-const aiReady=()=>!!settings.keys[curProv()];
+setTimeout(()=>{try{aiNote();}catch(_){}},0);
+const aiReady=()=>!!gemKey();
 function saveSettings(){try{localStorage.setItem("cp_settings",JSON.stringify({provider:settings.provider,keys:settings.keys,models:settings.models}));}catch(_){}}
 $("saveKey").onclick=()=>{
   const pv=curProv();
@@ -1202,7 +1216,7 @@ async function diagnoseGemini(e){
   if(e.local)return"الحاسبة ما گدرت توصل لخادم Gemini: "+String(e.message||"").slice(0,160)+" — شغّل VPN على مستوى النظام أو استخدم Gemini عبر OpenRouter.";
   let google=false,gem=false,gemStatus=0;
   try{await fetch("https://www.google.com/generate_204",{mode:"no-cors",cache:"no-store"});google=true;}catch(_){}
-  try{const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models?key="+encodeURIComponent(settings.keys.gemini),{cache:"no-store"});gem=true;gemStatus=r.status;
+  try{const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models?key="+encodeURIComponent(gemKey()),{cache:"no-store"});gem=true;gemStatus=r.status;
       if(!r.ok){const t=await r.text();if(/location is not supported|not available in your country/i.test(t))return aiErrorText({code:"region"});if(r.status===400||r.status===403)return aiErrorText({code:"auth"});}}catch(_){}
   if(!google)return"لا يوجد اتصال بالإنترنت من هذه الحاسبة.";
   if(!gem){
@@ -1220,8 +1234,8 @@ $("useOrGemini").onclick=()=>{
 };
 function aiErrorText(e){
   if(!e)return"خطأ غير معروف.";
-  if(e.code==="auth")return"المفتاح غير صحيح أو منتهي.";
-  if(e.code==="region")return"Google رفض الوصول لحسابك في Gemini (غالبًا بسبب المنطقة). اضغط «استخدام Gemini عبر OpenRouter».";
+  if(e.code==="auth")return"مفتاح Gemini بورقة Users (عمود gemini_key) غير صحيح أو منتهي — صحّحه بالورقة ثم سجّل الدخول من جديد.";
+  if(e.code==="region")return"Google رفض الوصول لحسابك في Gemini (غالبًا بسبب المنطقة) — شغّل VPN.";
   if(e.code==="credits")return"الرصيد غير كافٍ في حساب الذكاء الاصطناعي.";
   if(e.code==="rate_limited")return"طلبات كثيرة. انتظر قليلًا ثم أعد المحاولة.";
   if(isBusy(e))return"خوادم Gemini مشغولة الآن (ضغط عالٍ). جرّبنا عدة مرات ونماذج بديلة. انتظر دقيقة ثم اضغط مرة أخرى.";
@@ -1252,25 +1266,27 @@ async function callGemini(prompt,blobs,signal,opt){
   const parts=[{text:prompt}];
   for(const b of blobs){const d=await blobToDataUrl(b);parts.push({inline_data:{mime_type:"image/jpeg",data:d.slice(d.indexOf(",")+1)}});}
   const body=JSON.stringify({contents:[{role:"user",parts}],generationConfig:Object.assign({temperature:0,responseMimeType:"application/json",maxOutputTokens:8000},opt&&opt.seed!=null?{seed:opt.seed,topK:1}:{})});
-  const primary=(settings.models.gemini||PROVIDERS.gemini.model).replace(/^models\//,"");
-  const models=[primary,...GEMINI_FALLBACKS.filter(m=>m!==primary)];
+  const primary=SHEET_AI?AI_M1:(settings.models.gemini||PROVIDERS.gemini.model).replace(/^models\//,"");
+  // 1st model, then the 2nd one straight away when the 1st is busy / not answering; the whole round is tried 3 times
+  const models=SHEET_AI?[AI_M1,AI_M2]:[primary,...[AI_M2,...GEMINI_FALLBACKS].filter((m,i,A)=>m!==primary&&A.indexOf(m)===i)];
   let lastErr=null;
-  for(let mi=0;mi<models.length;mi++){
-    const model=models[mi];
-    for(let attempt=0;attempt<3;attempt++){
+  for(let round=0;round<3;round++){
+    for(let mi=0;mi<models.length;mi++){
+      const model=models[mi];
       try{
         const res=await geminiOnce(model,body,signal,mi===0);
-        if(mi>0)toast(`${primary} مشغول الآن، استُخدم ${model} بدلًا منه.`);
+        if(mi>0)toast(`${primary} مشغول أو لا يستجيب الآن، استُخدم ${model} بدلًا منه.`);
         return res;
       }catch(e){
         if(e&&e.code==="switched")return geminiOnce(e.model,body,signal,false);
         lastErr=e;
-        if(e&&(e.code==="cancelled"||e.code==="auth"||e.code==="region"||e.code==="network"||e.code==="parse"))throw e;
-        if(!isBusy(e))break;                         // model not usable -> next model
-        if(attempt<2){setStatusBusy&&setStatusBusy(`الخادم مشغول، إعادة المحاولة (${attempt+1})…`);await sleep([2000,5000][attempt],signal);}
+        if(e&&(e.code==="cancelled"||e.code==="auth"||e.code==="region"||e.code==="parse"))throw e;
+        // busy / quota / no answer / model missing -> the next model
+        if(!(isBusy(e)||e.code==="network"||e.code==="rate_limited"||e.code==="model"||e.code==="http"))throw e;
+        if(mi+1<models.length&&setStatusBusy)setStatusBusy(`${model} مشغول، التحويل إلى ${models[mi+1]}…`);
       }
     }
-    if(lastErr&&lastErr.code!=="model"&&!isBusy(lastErr))throw lastErr;
+    if(round<2){setStatusBusy&&setStatusBusy(`الموديلات مشغولة، إعادة المحاولة (${round+1})…`);await sleep([2500,6000][round],signal);}
   }
   throw lastErr||{code:"http",message:"no model"};
 }
@@ -1279,8 +1295,8 @@ async function geminiOnce(model,body,signal,isPrimary){
   let r;
   try{
     const local=viaLocalServer();
-    r=await fetch(local?`/api/gemini?model=${encodeURIComponent(model)}`:`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(settings.keys.gemini)}`,{method:"POST",signal,
-      headers:local?{"Content-Type":"application/json","X-Key":settings.keys.gemini}:{"Content-Type":"application/json"},body});
+    r=await fetch(local?`/api/gemini?model=${encodeURIComponent(model)}`:`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(gemKey())}`,{method:"POST",signal,
+      headers:local?{"Content-Type":"application/json","X-Key":gemKey()}:{"Content-Type":"application/json"},body});
   }catch(e){if(e&&e.name==="AbortError")throw {code:"cancelled"};throw {code:"network",message:String(e)};}
   if(!r.ok){
     const t=await r.text().catch(()=> "");
@@ -1379,7 +1395,7 @@ Reply with only a JSON array, one object per image, like:
 [{"n":1,"cat":"frontal_rest","rot":0,"conf":0.9,"why":"وجه أمامي بدون ابتسامة"}]`;
 }
 $("aiBtn").onclick=async()=>{
-  if(!aiReady()){$("aiSettings").open=true;toast(`أدخل مفتاح ${PROVIDERS[curProv()].name} أولًا.`);return;}
+  if(!aiReady()){toast("سجّل الدخول بالمنصة (☁️ أرشيف المرضى) حتى يُستعمل مفتاح Gemini الخاص بحسابك من ورقة Users.");return;}
   if(!photos.length)return;
   const todo=photos.slice();todo.forEach(p=>p.aiSeen=false);caseChart=null;   // a new case: the tooth chart is made again
   const per=Math.min(10,Math.max(1,todo.length));   // small batches answer reliably; the comparison passes afterwards see the whole set
@@ -1403,7 +1419,7 @@ $("aiBtn").onclick=async()=>{
         }
       }catch(err){
         if(err&&err.code==="cancelled")throw err;
-        if(err&&["auth","credits","rate_limited","model","network","region"].includes(err.code)){ $("aiStatus").textContent=aiErrorText(err)+(curProv()==="gemini"&&(err.code==="network"||err.code==="region")?" افتح الإعدادات واضغط «اختبار» لمعرفة السبب.":""); throw {code:"stop"}; }
+        if(err&&["auth","credits","rate_limited","model","network","region"].includes(err.code)){ $("aiStatus").textContent=aiErrorText(err)+(curProv()==="gemini"&&(err.code==="network"||err.code==="region")?" تأكد من الإنترنت أو شغّل VPN.":""); throw {code:"stop"}; }
         console.warn(err);failed+=batch.length;
       }
       done+=batch.length;setBar("aiBar",done/todo.length);
@@ -2761,7 +2777,7 @@ function occStatus(s){
     return {ok:true,p,a,R};
   }
   if(p.occlFail)return {ok:false,msg:"تعذّر التحليل: "+p.occlFail+" — ضع النقاط يدوياً من «🔍 تكبير وتحليل» أو «🤖 أعد التحليل» داخل التكبير."};
-  if(!aiReady())return {ok:false,msg:"لم تُحلَّل: لا يوجد مفتاح للذكاء الاصطناعي — أدخله بالإعدادات (التحليل يبدأ تلقائياً)، أو ضع النقاط يدوياً من «🔍 تكبير وتحليل»."};
+  if(!aiReady())return {ok:false,msg:"لم تُحلَّل: لا يوجد مفتاح Gemini — سجّل الدخول بالمنصة (التحليل يبدأ تلقائياً)، أو ضع النقاط يدوياً من «🔍 تكبير وتحليل»."};
   return {ok:false,msg:"⏳ التحليل يبدأ تلقائياً… (أو ضع النقاط يدوياً من «🔍 تكبير وتحليل»)."};
 }
 function drawMsg(g,t,x,y,fs,color){   // a wrapped message box on a card
@@ -2856,11 +2872,11 @@ function chartPanel(){
       <div class="tchart-n" dir="ltr">${miss.length?"Missing: "+miss.join(", "):"All teeth present (11-47)"}${caseChart.notes?" · "+esc(caseChart.notes):""}${caseChart.man?" · (edited)":""}</div>`;
   }
   d.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{const t=+b.dataset.t;if(caseChart.miss.has(t))caseChart.miss.delete(t);else caseChart.miss.add(t);caseChart.man=true;renderSlides();});
-  const ai=d.querySelector("[data-c=ai]");if(ai)ai.onclick=async()=>{if(!aiReady()){$("aiSettings").open=true;toast(`أدخل مفتاح ${PROVIDERS[curProv()].name} أولًا.`);return;}
+  const ai=d.querySelector("[data-c=ai]");if(ai)ai.onclick=async()=>{if(!aiReady()){toast("سجّل الدخول بالمنصة (☁️ أرشيف المرضى) حتى يُستعمل مفتاح Gemini الخاص بحسابك من ورقة Users.");return;}
     ai.disabled=true;ai.textContent="⏳ جارٍ الفحص…";if(caseChart)caseChart.man=false;
     try{if(!(await aiToothChart(new AbortController().signal)))toast("تعذّر فحص الأسنان — يحتاج صورتين للفم على الأقل.");}catch(e){toast(aiErrorText(e));}renderSlides();};
   const ln=d.querySelector("[data-c=lines]");if(ln)ln.onclick=()=>{const P=occPhotos().filter(p=>p.occl&&p.occl.pts),off=!P.every(p=>p.occl.noLines);P.forEach(p=>p.occl.noLines=off);renderSlides();};
-  const re=d.querySelector("[data-c=re]");if(re)re.onclick=async()=>{if(!aiReady()){$("aiSettings").open=true;return;}
+  const re=d.querySelector("[data-c=re]");if(re)re.onclick=async()=>{if(!aiReady()){toast("سجّل الدخول بالمنصة (☁️ أرشيف المرضى) حتى يُستعمل مفتاح Gemini الخاص بحسابك من ورقة Users.");return;}
     re.disabled=true;re.textContent="⏳ جارٍ التحليل…";try{await aiOcclusionAll(new AbortController().signal,true);}catch(e){toast(aiErrorText(e));}renderSlides();};
   return d;
 }
@@ -4754,7 +4770,7 @@ function updateButtons(){
   $("clearPhotos").hidden=!photos.length;
   $("photoStatus").textContent=photos.length?`${arNum(photos.filter(p=>!p.video).length)} صورة${photos.some(p=>p.video)?` و${arNum(photos.filter(p=>p.video).length)} فيديو`:""}.`:"لا توجد صور.";
   $("st2").classList.toggle("done",photos.length>0);
-  if(!aiCtl&&!photos.some(p=>p.cat))$("aiStatus").textContent=!aiReady()?`أدخل مفتاح ${PROVIDERS[curProv()].name} من الإعدادات.`:photos.length?"جاهز. اضغط «وزّع الصور».":"يحتاج صورًا أولًا.";
+  if(!aiCtl&&!photos.some(p=>p.cat))$("aiStatus").textContent=!aiReady()?(ARCH&&ARCH.user?"لا يوجد مفتاح Gemini لحسابك بورقة Users — اطلب من المدير إضافته.":"سجّل الدخول بالمنصة حتى يُستعمل مفتاح Gemini الخاص بحسابك."):photos.length?"جاهز. اضغط «وزّع الصور».":"يحتاج صورًا أولًا.";
   if(tpl&&!$("genBtn").disabled&&!$("genStatus").dataset.busy&&!$("genStatus").dataset.done)$("genStatus").textContent="جاهز للإنشاء.";
 }
 function slotState(s){
@@ -4889,14 +4905,14 @@ function renderSlidesInner(){
         if(act==="stickzoom"){openStickZoom(s);return;}
         if(act==="occzoom"){openOccZoom(s);return;}
         if(act==="ojzoom"){openOJZoom(s);return;}
-        if(act==="ojai"){if(!aiReady()){$("aiSettings").open=true;toast(`أدخل مفتاح ${PROVIDERS[curProv()].name} أولًا.`);return;}
+        if(act==="ojai"){if(!aiReady()){toast("سجّل الدخول بالمنصة (☁️ أرشيف المرضى) حتى يُستعمل مفتاح Gemini الخاص بحسابك من ورقة Users.");return;}
           if(p&&p.ojob&&p.ojob.man&&!confirm("النقاط مصححة باليد. هل تريد استبدالها بقياس تلقائي جديد؟"))return;
           b.disabled=true;b.textContent="⏳ جارٍ القياس…";
           aiOverjet(p,ojKind(s),new AbortController().signal).then(()=>renderSlides()).catch(e=>{toast(aiErrorText(e));renderSlides();});return;}
         if(act==="occhide"){if(p&&p.occl)p.occl.hide=!p.occl.hide;renderSlides();return;}
         if(act==="occlines"){if(p&&p.occl)p.occl.noLines=!p.occl.noLines;renderSlides();return;}
         if(act==="zoomv"){if(isOJSlot(s))openOJZoom(s);else if(isOccSlot(s))openOccZoom(s);else openZoomView(s);return;}
-        if(act==="occai"){if(!aiReady()){$("aiSettings").open=true;toast(`أدخل مفتاح ${PROVIDERS[curProv()].name} أولًا.`);return;}
+        if(act==="occai"){if(!aiReady()){toast("سجّل الدخول بالمنصة (☁️ أرشيف المرضى) حتى يُستعمل مفتاح Gemini الخاص بحسابك من ورقة Users.");return;}
           if(p&&p.occl&&p.occl.man&&!confirm("النقاط مصححة باليد. هل تريد استبدالها بتحليل تلقائي جديد؟"))return;
           b.disabled=true;b.textContent="⏳ جارٍ التحليل…";p.occlBusy=true;
           aiOcclusion(p,new AbortController().signal).then(ok=>{if(!ok)toast("تعذّر تحليل الصورة: "+(aiOcclusion.why||"لم يتعرّف الذكاء الاصطناعي على الأسنان المطلوبة (الناب والرحى الأولى بالفكين).")+" ضع النقاط يدويًا من «تحليل الإطباق».");else if(aiOcclusion.why)toast(aiOcclusion.why);renderSlides();})
