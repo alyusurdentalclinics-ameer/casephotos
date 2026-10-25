@@ -3530,11 +3530,23 @@ function zoomHeaderLayout(ov){
   const mo=new MutationObserver(()=>{if(!ov.isConnected){de.style.overflow=prevO;document.body.style.overflow=prevB;mo.disconnect();}});
   setTimeout(()=>mo.observe(document.body,{childList:true}),0);
   // the picture sits in its own box that fills exactly the space under the bar - it can never push the bar off the screen
-  ov.style.display="flex";ov.style.flexDirection="column";ov.style.overflow="hidden";
+  ov.style.display="flex";ov.style.flexDirection="column";ov.style.overflow="hidden";ov.style.overflow="clip";   // clip: cannot be scrolled at all (hidden can still be scrolled by focus / keys)
   {const cv=ov.querySelector("canvas");if(cv&&!cv.parentElement.dataset.cvbox){const box=document.createElement("div");box.dataset.cvbox="1";
-    box.style.cssText="position:relative;flex:1 1 0;min-height:0;min-width:0;overflow:hidden";cv.replaceWith(box);box.appendChild(cv);
+    box.style.cssText="position:relative;flex:1 1 0;min-height:0;min-width:0;overflow:hidden;overflow:clip";cv.replaceWith(box);box.appendChild(cv);
     cv.style.position="absolute";cv.style.inset="0";cv.style.width="100%";cv.style.height="100%";cv.style.display="block";cv.style.flex="none";cv.style.minHeight="0";}}
   ov.addEventListener("scroll",()=>{if(ov.scrollTop||ov.scrollLeft){ov.scrollTop=0;ov.scrollLeft=0;}});
+  // some browsers / extensions enlarge the whole page (page zoom on <html>/<body>): the zoom page then comes out
+  // bigger than the screen. Measure it on the real screen and shrink it so it always fits the computer screen exactly.
+  const fitScreen=()=>{if(!ov.isConnected)return;ov.style.zoom="";const R=ov.getBoundingClientRect(),W=window.innerWidth,H=window.innerHeight;
+    const f=Math.min(W/Math.max(1,R.width),H/Math.max(1,R.height));
+    if(f<.995||R.left<-1||R.top<-1){ov.style.zoom=String(f);const R2=ov.getBoundingClientRect();
+      if(R2.left<-1||R2.top<-1){ov.style.left=(-R2.left/f)+"px";ov.style.top=(-R2.top/f)+"px";}}};
+  document.body.appendChild(ov);fitScreen();
+  const onRz=()=>{if(!ov.isConnected){window.removeEventListener("resize",onRz,true);return;}fitScreen();};window.addEventListener("resize",onRz,true);
+  // safety net: if anything still shifted the page while it is open, put it back
+  const se0=document.scrollingElement,keepY=se0?se0.scrollTop:0,keepX=se0?se0.scrollLeft:0;
+  const keep=setInterval(()=>{if(!ov.isConnected){clearInterval(keep);return;}if(ov.scrollTop||ov.scrollLeft){ov.scrollTop=0;ov.scrollLeft=0;}
+    const se=document.scrollingElement;if(se&&(se.scrollTop!==keepY||se.scrollLeft!==keepX)){se.scrollTop=keepY;se.scrollLeft=keepX;}},250);
   const hd=[...ov.children].find(e=>e.tagName==="DIV"&&!e.dataset.cvbox);if(!hd||hd.dataset.fixed)return;hd.dataset.fixed="1";
   const kids=[...hd.childNodes].filter(n=>n.nodeType===1);
   const title=kids.find(e=>e.tagName==="B"),res=kids.find(e=>e.classList&&(e.classList.contains("res")||e.classList.contains("ang")));
