@@ -734,15 +734,39 @@ function placeholderDisplayed(w,h){
 /* ---------- template ---------- */
 $("tplInput").addEventListener("change",async e=>{
   const f=e.target.files[0];e.target.value="";if(!f)return;await loadTemplateFile(f);});
+/* make the template light: every big picture inside it (the previous patient's photos) is redrawn at most
+   1000 px on its long side as JPEG 0.75 - same shape, so the frames, crops and face positions stay the same.
+   Returns {blob,from,to} when the file got clearly smaller, else null (the zip is then left as it was). */
+async function shrinkTemplate(zip,from){
+  try{
+    const names=Object.keys(zip.files).filter(n=>/^ppt\/media\/.+\.(jpe?g|png)$/i.test(n));let changed=0;
+    for(const n of names){
+      const bytes=await zip.file(n).async("uint8array");if(bytes.length<180*1024)continue;
+      const isPng=/\.png$/i.test(n),bmp=await createImageBitmap(new Blob([bytes],{type:isPng?"image/png":"image/jpeg"}));
+      const k=Math.min(1,1000/Math.max(bmp.width,bmp.height)),w=Math.max(1,Math.round(bmp.width*k)),h=Math.max(1,Math.round(bmp.height*k));
+      const c=document.createElement("canvas");c.width=w;c.height=h;const g=c.getContext("2d");
+      if(isPng){g.drawImage(bmp,0,0,w,h);}else{g.fillStyle="#fff";g.fillRect(0,0,w,h);g.drawImage(bmp,0,0,w,h);}
+      bmp.close&&bmp.close();
+      const out=await new Promise(r=>c.toBlob(r,isPng?"image/png":"image/jpeg",.75));if(!out)continue;
+      const nb=new Uint8Array(await out.arrayBuffer());if(nb.length>=bytes.length*.8)continue;
+      zip.file(n,nb);changed++;}
+    if(!changed)return null;
+    const blob=await zip.generateAsync({type:"blob",compression:"DEFLATE",compressionOptions:{level:6}});
+    const before=from||0;if(before&&blob.size>=before*.9)return null;
+    return {blob,from:before,to:blob.size};
+  }catch(e){console.warn("shrinkTemplate",e);return null;}
+}
 async function loadTemplateFile(f){
   $("tplStatus").textContent="جارٍ قراءة القالب…";
   try{
     const zip=await JSZip.loadAsync(f);
+    // the template's photos are only the old patient's pictures (replaced every time): they are made smaller
+    const sh=await shrinkTemplate(zip,f.size);if(sh)f=new File([sh.blob],f.name,{type:"application/vnd.openxmlformats-officedocument.presentationml.presentation"});
     const found=await readTemplate(zip);
     if(!found.length)throw new Error("لم أجد أي صورة داخل الشرائح.");
-    slots=found;tpl={file:f,name:f.name};
+    slots=found;tpl={file:f,name:f.name,shrunk:sh};
     const known=slots.filter(s=>s.cat).length;
-    $("tplStatus").innerHTML=`<span class="mono">${esc(f.name)}</span><br>${arNum(slots.length)} إطار صورة، منها ${arNum(known)} معروف النوع.`;
+    $("tplStatus").innerHTML=`<span class="mono">${esc(f.name)}</span><br>${arNum(slots.length)} إطار صورة، منها ${arNum(known)} معروف النوع.`+(sh?`<br>✓ صُغّر حجم القالب من ${(sh.from/1048576).toFixed(1)} إلى ${(sh.to/1048576).toFixed(1)} ميگابايت.`:"");
     $("st1").classList.add("done");
     if(!$("outName").value)$("outName").value="";
     for(const id of Object.keys(assign))if(!slots.find(s=>s.id===id))delete assign[id];
