@@ -589,7 +589,7 @@ function sourceDirOfRels(relsPath){ // ppt/slides/_rels/slide1.xml.rels -> ppt/s
   const d=relsPath.replace(/\/?_rels\/[^/]+$/,"");return d;
 }
 function toast(msg,ms){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,ms||Math.max(3200,msg.length*70));}
-function setBar(id,frac){const b=$(id);if(frac==null){b.hidden=true;return;}b.hidden=false;b.firstElementChild.style.width=Math.round(frac*100)+"%";}
+function setBar(id,frac){const b=$(id);if(!b)return;if(frac==null){b.hidden=true;return;}b.hidden=false;b.firstElementChild.style.width=Math.round(frac*100)+"%";}
 const arNum=n=>n.toLocaleString("ar-IQ");
 function canvasBlob(c,type="image/jpeg",q=.88){return new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error("encode")),type,q));}
 function newCanvas(w,h){const c=document.createElement("canvas");c.width=Math.max(1,Math.round(w));c.height=Math.max(1,Math.round(h));return c;}
@@ -1059,8 +1059,8 @@ async function archUpload(blob,meta){
 async function archDownload(id,opt){
   const PDF=!!(opt&&opt.pdf),BAR=(opt&&opt.bar)||"archBar",MSG=(opt&&opt.msg)||archMsg;
   // 1 MB parts (big replies through the Apps Script web app can come back empty / broken), fetched 6 at a time
-  const inf=await archCall("info",{id,cs:1048576,pdf:PDF}),N=inf.chunks,parts=new Array(N);
-  const CH=inf.cs||4*1048576,PAR=Math.min(4,N);let done=0,next=0,stop=null;const t0=Date.now();const failed=[];
+  const inf=await archCall("info",{id,cs:(opt&&opt.cs)||1048576,pdf:PDF}),N=inf.chunks,parts=new Array(N);
+  const CH=inf.cs||4*1048576,PAR=Math.min((opt&&opt.par)||4,N);let done=0,next=0,stop=null;const t0=Date.now();const failed=[];
   const one=async i=>{
     const want=Math.min(CH,inf.size-i*CH);let err=null;
     const tries=one.slow?6:4;
@@ -1086,8 +1086,27 @@ async function archDownload(id,opt){
 }
 
 /* ---------- archive page: search a patient → his information, photo and files (download / view / restore) ---------- */
-const AP={pdf:new Map(),cur:null};
-function apMsg(t,bad){const el=$("apStatus");el.textContent=t||"";el.style.color=bad?"#B00000":"";}
+const AP={pdf:new Map(),cur:null,busy:new Map(),has:new Set()};
+/* the PDF copies are kept on this device (IndexedDB) and fetched in the background as soon as the patient is shown,
+   so «👁 عرض» opens at once */
+const pdfDB=()=>new Promise((res,rej)=>{const q=indexedDB.open("cp_pdf",1);q.onupgradeneeded=()=>q.result.createObjectStore("p");q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});
+async function pdfGet(id){try{const db=await pdfDB();return await new Promise(r=>{const q=db.transaction("p").objectStore("p").get(id);q.onsuccess=()=>r(q.result||null);q.onerror=()=>r(null);});}catch(_){return null;}}
+async function pdfPut(id,blob){try{const db=await pdfDB();await new Promise(r=>{const t=db.transaction("p","readwrite");t.objectStore("p").put(blob,id);t.oncomplete=r;t.onerror=r;});}catch(_){}}
+function apMark(id){const b=document.querySelector(`.pf[data-id="${CSS.escape(id)}"] [data-a=view]`);if(b)b.textContent="👁 عرض ✓";}
+/* the PDF of one file: memory → this device → the platform (made there first if needed) */
+function apPdf(id,hasPdf,quiet){
+  if(AP.pdf.has(id))return Promise.resolve(AP.pdf.get(id));
+  if(AP.busy.has(id))return AP.busy.get(id);
+  const pr=(async()=>{
+    let b=await pdfGet(id);
+    if(!b){
+      if(!hasPdf&&!AP.has.has(id)){if(!quiet)apMsg("جارٍ تجهيز العرض للمشاهدة… (أول مرة لكل ملف قد يأخذ دقيقة)");await archCall("pdf",{id});AP.has.add(id);}
+      if(!quiet)apMsg("جارٍ تنزيل العرض…");
+      const f=await archDownload(id,{pdf:true,cs:2097152,par:4,bar:quiet?"__none":"apBar",msg:quiet?()=>{}:apMsg});b=f.blob;await pdfPut(id,b);}
+    const url=URL.createObjectURL(b);AP.pdf.set(id,url);apMark(id);return url;})();
+  AP.busy.set(id,pr);pr.catch(()=>{}).finally(()=>AP.busy.delete(id));return pr;
+}
+function apMsg(t,bad){if(t===undefined)return;const el=$("apStatus");el.textContent=t||"";el.style.color=bad?"#B00000":"";}
 function apOpen(){
   if(!ARCH.user){toast("سجّل الدخول بحساب Google أولاً (قسم «☁️ أرشيف المرضى»).");document.getElementById("arch").scrollIntoView({behavior:"smooth"});return;}
   $("archPage").hidden=false;document.body.style.overflow="hidden";setTimeout(()=>$("apQ").focus(),50);
@@ -1114,6 +1133,10 @@ async function apSearch(){
       return `<div class="pc">${th?`<img class="pc-img" alt="" src="${th}">`:`<div class="pc-img">🦷</div>`}<div class="pc-main"><div class="pc-name">${esc(info.name||cs[0].patient)}</div>
         ${rows?`<div class="pc-info">${rows}</div>`:""}${info.cc?`<div class="pc-cc">الشكوى: ${esc(info.cc)}</div>`:""}<div class="pc-files">${files}</div></div></div>`;}).join("");
     $("apList").querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>apAct(b.closest(".pf").dataset.id,b.closest(".pf").dataset.name,b.dataset.a));
+    for(const c of j.cases)if(c.hasPdf)AP.has.add(c.id);
+    // in the background: the newest 3 presentations get their PDF on this device (made on the platform first if missing)
+    (async()=>{for(const c of j.cases.filter(c=>/\.pptx$/i.test(c.fileName)).slice(0,3)){if($("archPage").hidden)break;try{await apPdf(c.id,c.hasPdf,true);}catch(e){console.warn("prefetch",e);}}})();
+    for(const c of j.cases)if(AP.pdf.has(c.id))apMark(c.id);else pdfGet(c.id).then(b=>{if(b){AP.pdf.set(c.id,URL.createObjectURL(b));apMark(c.id);}});
   }catch(e){apMsg(e.message,true);}
 }
 async function apAct(id,name,act){
@@ -1131,10 +1154,7 @@ async function apAct(id,name,act){
     catch(e){if(!/أُلغي/.test(e.message))apMsg("تعذّر: "+e.message,true);}finally{ARCH.busy=false;setBar("apBar",null);}return;}
   if(act==="view"){
     ARCH.busy=true;
-    try{let url=AP.pdf.get(id);
-      if(!url){apMsg("جارٍ تجهيز العرض للمشاهدة… (أول مرة لكل ملف قد يأخذ دقيقة)");setBar("apBar",.15);
-        await archCall("pdf",{id});apMsg("جارٍ تنزيل العرض…");
-        const f=await archDownload(id,Object.assign({pdf:true},opt));url=URL.createObjectURL(f.blob);AP.pdf.set(id,url);}
+    try{const url=await apPdf(id,AP.has.has(id),false);
       AP.cur={id,name};$("apVName").textContent=name;$("apFrame").src=url;$("apView").hidden=false;apMsg("");
       if(innerWidth<900)$("apView").scrollIntoView({behavior:"smooth"});}
     catch(e){apMsg("تعذّر عرض الملف: "+e.message,true);}finally{ARCH.busy=false;setBar("apBar",null);}}
