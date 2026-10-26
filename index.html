@@ -311,6 +311,14 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(200px,34
   .doc-n{font-size:70px!important;line-height:1!important}
   .doc-orn{margin-top:0!important}
 }
+/* patient card: bigger, label and value clearly told apart */
+.pc-info{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))!important;gap:8px!important;font-size:15px!important}
+.pc-info span{display:flex;flex-direction:column;gap:2px;padding:7px 10px;border-radius:10px;background:var(--surface2);border:1px solid var(--line);border-inline-start:3px solid #22C3B3}
+.pc-info i{font-style:normal;font-size:12.5px;font-weight:700;color:#1A8F99}
+.pc-info b{font-size:16px;font-weight:800;color:#0B1D4A}
+.pc-name{font-size:24px!important}
+.pc-cc{font-size:15px!important;padding:7px 10px;border-radius:10px;background:#FDECEC;border-inline-start:3px solid #C0392B}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .pc-info b{color:#E2EBF0}}
 </style>
 
 <script src="face-api.js"></script>
@@ -1223,7 +1231,7 @@ function apRender(cases){
     const G={gender:"الجنس",age:"العمر",edu:"التحصيل",addr:"العنوان",ref:"محوَّل من",sys:"الصحة العامة",by:"سجّلها",date:"التاريخ"};
     $("apList").innerHTML=[...by.values()].map(cs=>{
       const withInfo=cs.find(c=>c.info)||{},info=withInfo.info||{},th=(cs.find(c=>c.thumb)||{}).thumb;
-      const rows=Object.entries(G).filter(([k])=>info[k]).map(([k,l])=>`<span>${l}: <b>${esc(k==="gender"?(info[k]==="male"?"ذكر":info[k]==="female"?"أنثى":info[k]):k==="age"?info[k]+" سنة":info[k])}</b></span>`).join("");
+      const rows=Object.entries(G).filter(([k])=>info[k]).map(([k,l])=>`<span><i>${l}</i><b>${esc(k==="gender"?(info[k]==="male"?"ذكر":info[k]==="female"?"أنثى":info[k]):k==="age"?info[k]+" سنة":info[k])}</b></span>`).join("");
       const files=cs.map(c=>{const st=/\.cpstate$/i.test(c.fileName),own=ARCH.user.role==="admin"||String(c.savedBy).toLowerCase()===ARCH.user.email;
         return `<div class="pf" data-id="${esc(c.id)}" data-name="${esc(c.fileName)}"><span class="t">${st?"💾 حالة البرنامج":"📊 عرض PowerPoint"}</span><span class="mono">${esc(apFmt(c.date))}</span><span class="mono">${(c.size/1048576).toFixed(1)} MB</span><span class="sp"></span>
           ${st?`<button class="btn sm primary" data-a="state" type="button">↩ استرجاع الحالة</button>`:`<button class="btn sm primary" data-a="view" type="button">👁 عرض</button>`}
