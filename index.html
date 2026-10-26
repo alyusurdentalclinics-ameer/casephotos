@@ -292,7 +292,8 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(200px,34
   .app-bar{gap:8px}.app-bar .summary{flex-basis:100%}.acct{flex:1;min-width:0}.acct-u{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
   .wrap{padding-inline:10px}
   .hero-logo{padding:12px!important}.hero-logo img{max-width:120px!important}
-  .pc-img{height:150px}
+  .pc-img{width:100%;height:auto;max-height:none;object-fit:contain;background:#fff}
+  div.pc-img{height:150px}
 }
 .doc-name{display:flex;flex-direction:column;align-items:center;gap:0;margin-top:2px}
 .doc-t{font-family:"Aref Ruqaa",serif;font-size:26px;color:#0B1D4A;opacity:.85;line-height:1}
@@ -1101,6 +1102,11 @@ function piInfo(){const g=id=>{const e=$(id);return e?e.value.trim():"";};
 function archThumb(){
   try{const list=[...slots].sort((a,b)=>(a.n-b.n)||0);
     for(const s of list){const a=assign[s.id];if(!a||!a.photoId)continue;const p=photos.find(x=>x.id===a.photoId);if(!p||p.video)continue;
+      // the photo of the first slide exactly as it goes into the frame (same crop / turn / white background) - without any guide line
+      try{const fr=frameRect(s),k=320/Math.max(fr.w,fr.h),W=Math.max(8,Math.round(fr.w*k)),H=Math.max(8,Math.round(fr.h*k));
+        const c=renderDisplayed(wbSrc(p,s,a,p.prev),{rot:a.rot,flip:a.flip,align:effAlign(a),bg:wbBg(p,s,a),zoom:a.zoom,tilt:a.tilt,level:a.eyeLevel,dx:a.dx,dy:a.dy,nudged:!!(a.dx||a.dy||(a.zoom&&a.zoom!==1))},W,H);
+        const o=newCanvas(W,H),g=o.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,W,H);g.drawImage(c,0,0,W,H);
+        return o.toDataURL("image/jpeg",.75);}catch(e){console.warn("thumb render",e);}
       const cv=document.querySelector(`.slot[data-sid="${CSS.escape(s.id)}"] .pv canvas`);if(!cv||!cv.width)continue;
       const k=Math.min(1,260/Math.max(cv.width,cv.height)),c=newCanvas(cv.width*k,cv.height*k);c.getContext("2d").drawImage(cv,0,0,c.width,c.height);
       return c.toDataURL("image/jpeg",.72);}
