@@ -1149,6 +1149,8 @@ async function archSaveLast(){
   const patient=(L.patient||"").trim();if(!patient){archMsg("اكتب اسم المريض بخانة «اسم الملف» قبل إنشاء العرض حتى يُحفظ باسمه.",true);return;}
   ARCH.busy=true;archRender();archMsg(`جارٍ حفظ «${L.name}» بأرشيف المريض ${patient}…`);
   try{const f=await archUpload(L.blob,{patient,fileName:L.name,notes:$("archNotes").value.trim()});L.saved=true;
+    // the PDF copy for «👁 عرض» is made now, in the background (the program does not wait for it)
+    if(f&&f.case&&f.case.id)archCall("pdf",{id:f.case.id}).catch(e=>console.warn("pdf",e));
     archMsg(`✓ حُفظ بالأرشيف: ${f.case.fileName}`);toast("تم حفظ العرض بالأرشيف.");await archNames();
     if(key(patient)&&key($("archQ").value)===key(patient))archFind();}
   catch(e){archMsg("تعذّر الحفظ بالأرشيف: "+e.message,true);}
