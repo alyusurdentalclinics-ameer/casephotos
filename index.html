@@ -184,10 +184,10 @@ aside.pool h3,.arch-h h2,.step h2{color:var(--ink)}
 
 /* ===== header inspired by the Al Yusur banner: navy sides, a light centre between teal chevrons ===== */
 :root{--teal:#2BDCC8;--blue:#3B82C4}
-header.hero{position:relative;display:grid;grid-template-columns:minmax(150px,230px) minmax(0,1fr) minmax(150px,260px);min-height:200px;
+header.hero{position:relative;display:grid;grid-template-columns:minmax(200px,340px) minmax(0,1fr) minmax(200px,380px);min-height:200px;
   margin-bottom:24px;border-radius:24px;overflow:hidden;background:#0B1D4A;box-shadow:0 20px 44px rgba(11,29,74,.28)}
 .hero-logo{display:grid;place-items:center;padding:18px 16px;background:radial-gradient(circle at 60% 40%,#173A86 0%,#0B1D4A 70%)}
-.hero-logo img{width:100%;max-width:200px;height:auto;filter:drop-shadow(0 6px 14px rgba(0,0,0,.35))}
+.hero-logo img{width:100%;max-width:260px;height:auto;filter:drop-shadow(0 6px 14px rgba(0,0,0,.35))}
 .hero-mid{position:relative;display:flex;margin-inline:-34px;z-index:1;
   background:linear-gradient(180deg,#FFFFFF,#D9FBF6);
   clip-path:polygon(0 0,100% 0,calc(100% - 40px) 50%,100% 100%,0 100%,40px 50%)}
@@ -301,6 +301,15 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(150px,23
   filter:drop-shadow(0 2px 0 rgba(11,29,74,.55)) drop-shadow(0 8px 16px rgba(11,29,74,.35));letter-spacing:.5px}
 .doc-orn{font-size:13px;color:rgba(255,255,255,.85);letter-spacing:2px;margin-top:2px}
 @media (max-width:600px){.doc-n{font-size:36px}.doc-t{font-size:18px}}
+/* bigger name, same header height (desktop) */
+@media (min-width:901px){
+  header.hero{height:245px}
+  .hero-mid-in{gap:2px!important;padding-block:8px!important}
+  .clinic-name{font-size:28px!important;line-height:1.1!important}.clinic-name span{font-size:20px!important}
+  .doc-t{font-size:34px!important;line-height:1!important;margin-top:4px}
+  .doc-n{font-size:70px!important;line-height:1!important}
+  .doc-orn{margin-top:0!important}
+}
 </style>
 
 <script src="face-api.js"></script>
