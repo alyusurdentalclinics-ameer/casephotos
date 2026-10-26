@@ -268,6 +268,10 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(150px,23
 .acct{display:flex;align-items:center;gap:8px;padding:4px 6px 4px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:12.5px;color:var(--muted)}
 .acct-u{font-weight:700;color:var(--ink);direction:ltr;unicode-bidi:isolate}
 .arch-btns .btn{flex:1}
+.arch-chk{display:flex;gap:8px;flex-wrap:wrap}
+.arch-chk label.chk{flex:1;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:var(--surface2);font-weight:700;color:var(--ink);white-space:nowrap}
+.arch-chk label.chk:has(input:checked){border-color:var(--teal);background:var(--teal-soft)}
+.arch-chk input:disabled+*{opacity:.5}
 </style>
 
 <script src="face-api.js"></script>
@@ -338,7 +342,7 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(150px,23
     </div>
     <div class="step" id="st4">
       <h2><span class="n">٤</span>إنشاء العرض</h2>
-      <input type="text" id="outName" placeholder="اسم الملف (اسم المريض)">
+      <input type="text" id="outName" hidden>
       <div class="opts-hidden" hidden>
       <div class="size-row"><label for="closeup">صورة الملف (الشريحة ١)</label>
         <select id="closeup" style="flex:1;min-width:0;font:inherit;padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface2);color:var(--ink)">
@@ -357,7 +361,7 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(150px,23
       <label class="chk"><input type="checkbox" id="blankEmpty" checked> إفراغ الإطارات التي لم تُملأ حتى لا تبقى صور المريض السابق فيها</label>
       </div>
       <div class="row"><button class="btn primary" id="genBtn" type="button" disabled>إنشاء العرض</button></div>
-      <div class="row arch-btns"><button class="btn" id="archSave" type="button" disabled title="يحفظ آخر عرض أُنشئ بأرشيف المريض (باسم «اسم الملف»)">☁️ أرشفة العرض</button><button class="btn" id="archStateSave" type="button" disabled title="يحفظ حالة البرنامج الحالية (الصور + التوزيع + كل التعديلات) بأرشيف المريض">☁️ أرشفة الحالة</button></div>
+      <div class="arch-chk"><label class="chk"><input type="checkbox" id="archSave"> ☁️ أرشفة العرض</label><label class="chk"><input type="checkbox" id="archStateSave"> ☁️ أرشفة الحالة</label></div>
       <div class="status" id="archStatus" role="status"></div><div class="bar" id="archBar" hidden><i></i></div>
       <div class="st-box" hidden>
         <div class="st-h">💾 حالة البرنامج <small>(الصور + التوزيع + كل التعديلات والنقاط) — تنحفظ تلقائياً قبل كل «إنشاء العرض»</small></div>
@@ -380,7 +384,7 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(150px,23
   <section class="pinfo" id="pinfo">
     <div class="pinfo-h"><h2>🧾 بيانات المريض <small>(تُكتب بشريحة «Patient specification» بالعرض)</small></h2></div>
     <div class="pinfo-g">
-      <label>الاسم <small>Name</small><input type="text" id="piName" placeholder="إذا تُرك فارغاً يُستعمل «اسم الملف»"></label>
+      <label>الاسم <small>Name</small><input type="text" id="piName" placeholder="اسم المريض (اسم ملف العرض والأرشيف)"></label>
       <label>الجنس <small>Gender</small><select id="piGender"><option value="">—</option><option value="male">male (ذكر)</option><option value="female">female (أنثى)</option></select></label>
       <label>العمر <small>Age (years)</small><input type="text" id="piAge" inputmode="numeric" placeholder="مثلاً 30"></label>
       <label>التحصيل الدراسي <small>Educational Achievement</small><input type="text" id="piEdu"></label>
@@ -1032,7 +1036,7 @@ function archRender(){
   const signed=!!ARCH.user;
   $("archUser").textContent=signed?`🟢 ${ARCH.user.email}${ARCH.user.role==="admin"?" · مدير":""}`:"⚪ غير متصل — سجّل الدخول";
   $("gsiBtn").hidden=signed||!archReady();$("archOut").hidden=!signed;
-  $("archSave").disabled=!signed||!ARCH.last||ARCH.busy;$("archStateSave").disabled=!signed||!photos.length||ARCH.busy;$("archTplSave").hidden=!signed||ARCH.user.role!=="admin";$("archTplSave").disabled=!signed||!tpl||ARCH.busy;
+  $("archSave").disabled=!signed;$("archStateSave").disabled=!signed;$("archTplSave").hidden=true;$("archTplSave").disabled=!signed||!tpl||ARCH.busy;
   $("archTplLoad").hidden=true;$("archFind").disabled=!signed;$("archQ").disabled=!signed;
   $("archLastName").textContent=ARCH.last?`آخر عرض: ${ARCH.last.name} (${(ARCH.last.blob.size/1048576).toFixed(1)} MB)${ARCH.last.saved?" — ✓ محفوظ بالأرشيف":""}`:"لم يُنشأ عرض بعد.";
 }
@@ -1264,8 +1268,12 @@ async function archLoadTemplate(silent){
   finally{ARCH.busy=false;setBar("archBar",null);archRender();}
 }
 /*__ARCH_BIND__*/$("archOut").onclick=()=>{ARCH.user=null;applySheetAI(null);ARCH.token=null;try{sessionStorage.removeItem("cp_idtoken");google.accounts.id.disableAutoSelect();}catch(_){}archMsg("");archRender();};
-$("archSave").onclick=archSaveLast;
-$("archStateSave").onclick=async()=>{if(!ARCH.user||ARCH.busy||!photos.length)return;try{const w=workState();await archSaveState(w.json,w.files,false);}catch(e){archMsg("تعذّر: "+e.message,true);}};
+// the two ticks: saved with «إنشاء العرض» (remembered on this device)
+for(const id of ["archSave","archStateSave"]){try{$(id).checked=localStorage.getItem("cp_"+id)==="1";}catch(_){}
+  $(id).onchange=()=>{try{localStorage.setItem("cp_"+id,$(id).checked?"1":"0");}catch(_){}};}
+// the patient name is also the file name
+function syncName(){const n=$("piName").value.trim();if(n)$("outName").value=n;else if($("outName").value)$("piName").value=$("outName").value;}
+$("piName").addEventListener("input",()=>{$("outName").value=$("piName").value.trim();try{updateButtons();}catch(_){}});
 $("archFind").onclick=archFind;
 $("archQ").addEventListener("keydown",e=>{if(e.key==="Enter")archFind();});
 $("archQ").addEventListener("change",()=>{if($("archQ").value)archFind();});
@@ -1428,7 +1436,7 @@ async function stRestore(st,getFile){
   const ids=new Set(photos.map(p=>p.id));
   assign={};for(const [k,a] of Object.entries(st.assign||{})){if(!a||!ids.has(a.photoId))continue;if(!slots.find(s=>s.id===k))continue;a.alignKey=null;assign[k]=a;}
   caseChart=st.caseChart||null;
-  for(const [id,v] of Object.entries(st.fields||{})){const e=$(id);if(!e)continue;if(e.type==="checkbox")e.checked=!!v;else e.value=v;}
+  for(const [id,v] of Object.entries(st.fields||{})){const e=$(id);if(!e)continue;if(e.type==="checkbox")e.checked=!!v;else e.value=v;}try{syncName();}catch(_){}
   $("faceScaleOut").textContent=$("faceScale").value+"%";
   renderAll();
   const miss=st.photos.length-photos.length;
@@ -5317,7 +5325,7 @@ $("picker").addEventListener("click",e=>{if(e.target.id==="picker")closePicker()
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("picker").hidden)closePicker();});
 
 /* ---------- build the pptx ---------- */
-$("genBtn").onclick=async()=>{
+$("genBtn").onclick=async()=>{try{syncName();}catch(_){}
   if(!tpl)return;
   const btn=$("genBtn");btn.disabled=true;$("genStatus").dataset.busy="1";delete $("genStatus").dataset.done;
   const status=m=>$("genStatus").textContent=m;
@@ -5471,7 +5479,7 @@ $("genBtn").onclick=async()=>{
     if(!/\.pptx$/i.test(fname))fname+=".pptx";
     ARCH.last={name:fname,blob:out,patient:$("outName").value.trim(),saved:false};archRender();
     await saveFile(fname,out);
-    if($("archAuto").checked&&ARCH.user)(async()=>{await archSaveLast();if(preState)await archSaveState(preState.json,preState.files,true);})();
+    if(ARCH.user&&($("archSave").checked||$("archStateSave").checked))(async()=>{if($("archSave").checked)await archSaveLast();if($("archStateSave").checked&&preState)await archSaveState(preState.json,preState.files,true);})();
     status(`تم: ${fname} (${(out.size/1048576).toFixed(1)} MB)${dropPaths.size?` · حُذفت ${arNum(dropPaths.size)} شريحة فارغة`:""}${skippedVideo?` · ${arNum(skippedVideo)} فيديو بقي من القالب`:""}`);
     $("st4").classList.add("done");$("genStatus").dataset.done="1";
   }catch(err){console.error(err);status("تعذّر إنشاء العرض: "+(err.message||err));}
