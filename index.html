@@ -282,6 +282,18 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(150px,23
 .gate-btn{display:flex;justify-content:center;min-height:44px}
 .gate-msg{margin-top:14px;font-size:13px;color:#5A6D78;min-height:1.6em}
 .gate-msg.bad{color:#B8322A;font-weight:700}
+@media (max-width:640px){
+  .ap-top{padding:10px 12px;gap:8px}.ap-top h2{font-size:17px;flex:1}.ap-x{width:36px;height:36px;font-size:16px;order:2}
+  .ap-search{order:3;flex-basis:100%;min-width:0}.ap-search .btn{padding:8px 12px}
+  .ap-body{padding:10px;gap:10px}.ap-view{height:auto;flex:1;border-radius:12px}
+  .ap-vh{flex-wrap:wrap;padding:8px}.ap-vh b{flex-basis:100%;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ap-vh .btn{flex:1;font-size:12.5px;padding:6px 8px}
+  .ap-pages{padding:8px;gap:8px}.ap-pages canvas{border-radius:2px}
+  .pc{padding:12px;gap:12px}.pc-name{font-size:18px}.pf{font-size:12px}.pf .btn{flex:1}
+  .app-bar{gap:8px}.app-bar .summary{flex-basis:100%}.acct{flex:1;min-width:0}.acct-u{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .wrap{padding-inline:10px}
+  .hero-logo{padding:12px!important}.hero-logo img{max-width:120px!important}
+  .pc-img{height:150px}
+}
 </style>
 
 <script src="face-api.js"></script>
@@ -1168,16 +1180,16 @@ async function apShowPdf(url){
   try{
     const lib=await loadPdfJs(),PJ="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/";
     // fonts the PDF does not carry inside it (Calibri…): pdf.js needs its font data and character maps, otherwise letters come out spaced wrongly
-    const doc=await lib.getDocument({url,cMapUrl:PJ+"cmaps/",cMapPacked:true,standardFontDataUrl:PJ+"standard_fonts/",useSystemFonts:true}).promise;if(run!==AP.view)return;
-    host.innerHTML="";const W=Math.min(1400,host.clientWidth-32),dpr=Math.min(2,window.devicePixelRatio||1);
+    const doc=await lib.getDocument({url,cMapUrl:PJ+"cmaps/",cMapPacked:true,standardFontDataUrl:PJ+"standard_fonts/",disableFontFace:true,useSystemFonts:false}).promise;if(run!==AP.view)return;
+    host.innerHTML="";const W=Math.min(1400,host.clientWidth-(innerWidth<640?16:32)),dpr=Math.min(innerWidth<640?1.5:2,window.devicePixelRatio||1);
     for(let n=1;n<=doc.numPages;n++){
       const pg=await doc.getPage(n);if(run!==AP.view)return;
       const v0=pg.getViewport({scale:1}),vp=pg.getViewport({scale:W/v0.width*dpr});
       const c=document.createElement("canvas");c.width=Math.round(vp.width);c.height=Math.round(vp.height);host.appendChild(c);
       await pg.render({canvasContext:c.getContext("2d"),viewport:vp}).promise;
     }
-  }catch(e){console.warn("pdf.js",e);if(run!==AP.view)return;   // without pdf.js: the browser's own viewer, side panel closed
-    apNative(url);}
+  }catch(e){console.warn("pdf.js",e);if(run!==AP.view)return;
+    if(navigator.pdfViewerEnabled===false||/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent)){host.innerHTML='<div class="pg-wait">تعذّر عرض الملف هنا — استعمل «⬇ تنزيل».</div>';}else apNative(url);}
 }
 const apFmt=d=>{const t=new Date(d);return isNaN(t)?String(d):t.toLocaleString("ar-IQ",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});};
 /* search: all names/files are kept in memory (one call when the page opens) → results show at once while typing;
@@ -1242,7 +1254,7 @@ async function apAct(id,name,act){
   if(act==="view"){
     ARCH.busy=true;
     try{const url=await apPdf(id,AP.has.has(id),false);
-      AP.cur={id,name};$("apVName").textContent=name;$("apView").hidden=false;document.querySelector(".ap-body").classList.add("viewing");apMsg("");apNative(url);
+      AP.cur={id,name};$("apVName").textContent=name;$("apView").hidden=false;document.querySelector(".ap-body").classList.add("viewing");apMsg("");if(navigator.pdfViewerEnabled===false||/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent))apShowPdf(url);else apNative(url);
       if(innerWidth<900)$("apView").scrollIntoView({behavior:"smooth"});}
     catch(e){apMsg("تعذّر عرض الملف: "+e.message,true);}finally{ARCH.busy=false;setBar("apBar",null);}}
 }
