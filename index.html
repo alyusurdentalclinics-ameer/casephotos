@@ -261,6 +261,10 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(150px,23
 .pf .mono{color:var(--muted)}.pf .t{font-weight:700}.pf .sp{flex:1}
 @media (max-width:900px){.ap-body{flex-direction:column}.ap-view{flex:none;height:75vh}}
 @media (max-width:560px){.pc{flex-direction:column}.pc-img{width:100%;height:180px}}
+.ap-body.viewing .ap-res{display:none}.ap-body.viewing .ap-view{flex:1;height:auto}
+.ap-pages{flex:1;overflow:auto;background:#3B4048;padding:16px;display:flex;flex-direction:column;align-items:center;gap:14px}
+.ap-pages canvas{display:block;width:100%;max-width:1400px;height:auto;background:#fff;border-radius:4px;box-shadow:0 6px 20px rgba(0,0,0,.35)}
+.ap-pages .pg-wait{color:#cfd6df;font-size:14px;padding:30px}
 </style>
 
 <script src="face-api.js"></script>
@@ -434,7 +438,7 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(150px,23
   </div>
   <div class="ap-body">
     <div class="ap-res"><div class="status" id="apStatus" role="status"></div><div class="bar" id="apBar" hidden><i></i></div><div id="apList"></div></div>
-    <div class="ap-view" id="apView" hidden><div class="ap-vh"><b id="apVName"></b><span style="flex:1"></span><button class="btn sm" id="apVDl" type="button">⬇ تنزيل PowerPoint</button><button class="btn sm" id="apVClose" type="button">✕ إغلاق العرض</button></div><iframe id="apFrame" title="عرض الملف"></iframe></div>
+    <div class="ap-view" id="apView" hidden><div class="ap-vh"><b id="apVName"></b><span style="flex:1"></span><button class="btn sm" id="apVDl" type="button">⬇ تنزيل PowerPoint</button><button class="btn sm" id="apVClose" type="button">→ رجوع لبطاقة المريض</button></div><div class="ap-pages" id="apPages"></div><iframe id="apFrame" title="عرض الملف" hidden></iframe></div>
   </div>
 </div>
 <div class="toast" id="toast" hidden></div>
@@ -1113,7 +1117,32 @@ function apOpen(){
   if(!$("apList").innerHTML)apMsg("اكتب اسم المريض أو اختره من القائمة ثم اضغط «بحث».");
 }
 function apClose(){$("archPage").hidden=true;document.body.style.overflow="";apViewClose();}
-function apViewClose(){$("apView").hidden=true;$("apFrame").removeAttribute("src");AP.cur=null;}
+function apViewClose(){$("apView").hidden=true;$("apFrame").removeAttribute("src");$("apFrame").hidden=true;$("apPages").innerHTML="";$("apPages").hidden=false;
+  document.querySelector(".ap-body").classList.remove("viewing");AP.cur=null;AP.view=(AP.view||0)+1;}
+/* the PDF is drawn here page by page (pdf.js), the full width of the page - no side panel, no toolbar */
+let pdfjsP=null;
+function loadPdfJs(){
+  if(window.pdfjsLib)return Promise.resolve(window.pdfjsLib);
+  if(pdfjsP)return pdfjsP;
+  pdfjsP=new Promise((res,rej)=>{const sc=document.createElement("script");sc.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+    sc.onload=()=>{try{pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";res(pdfjsLib);}catch(e){rej(e);}};
+    sc.onerror=()=>{pdfjsP=null;rej(new Error("pdf.js"));};document.head.appendChild(sc);});
+  return pdfjsP;
+}
+async function apShowPdf(url){
+  const run=AP.view=(AP.view||0)+1,host=$("apPages");host.hidden=false;$("apFrame").hidden=true;host.innerHTML='<div class="pg-wait">⏳ جارٍ فتح العرض…</div>';
+  try{
+    const lib=await loadPdfJs(),doc=await lib.getDocument(url).promise;if(run!==AP.view)return;
+    host.innerHTML="";const W=Math.min(1400,host.clientWidth-32),dpr=Math.min(2,window.devicePixelRatio||1);
+    for(let n=1;n<=doc.numPages;n++){
+      const pg=await doc.getPage(n);if(run!==AP.view)return;
+      const v0=pg.getViewport({scale:1}),vp=pg.getViewport({scale:W/v0.width*dpr});
+      const c=document.createElement("canvas");c.width=Math.round(vp.width);c.height=Math.round(vp.height);host.appendChild(c);
+      await pg.render({canvasContext:c.getContext("2d"),viewport:vp}).promise;
+    }
+  }catch(e){console.warn("pdf.js",e);if(run!==AP.view)return;   // without pdf.js: the browser's own viewer, side panel closed
+    host.hidden=true;const f=$("apFrame");f.hidden=false;f.src=url+"#navpanes=0&view=FitH";}
+}
 const apFmt=d=>{const t=new Date(d);return isNaN(t)?String(d):t.toLocaleString("ar-IQ",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});};
 async function apSearch(){
   const q=$("apQ").value.trim();if(!ARCH.user)return;apMsg("جارٍ البحث…");apViewClose();
@@ -1155,7 +1184,7 @@ async function apAct(id,name,act){
   if(act==="view"){
     ARCH.busy=true;
     try{const url=await apPdf(id,AP.has.has(id),false);
-      AP.cur={id,name};$("apVName").textContent=name;$("apFrame").src=url;$("apView").hidden=false;apMsg("");
+      AP.cur={id,name};$("apVName").textContent=name;$("apView").hidden=false;document.querySelector(".ap-body").classList.add("viewing");apMsg("");apShowPdf(url);
       if(innerWidth<900)$("apView").scrollIntoView({behavior:"smooth"});}
     catch(e){apMsg("تعذّر عرض الملف: "+e.message,true);}finally{ARCH.busy=false;setBar("apBar",null);}}
 }
