@@ -163,10 +163,12 @@ aside.pool .hint{margin:0 0 10px;font-size:12.5px;color:var(--muted)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0B1220;--surface:#121C2E;--surface2:#17233A;--line:#24324A;--accent:#5E9BF0;--accent-soft:#18284A;--bar:#1B3B86;--teal-soft:#123A3C}}
 :root[data-theme="dark"]{--bg:#0B1220;--surface:#121C2E;--surface2:#17233A;--line:#24324A;--accent:#5E9BF0;--accent-soft:#18284A;--bar:#1B3B86;--teal-soft:#123A3C}
 body{background:radial-gradient(1200px 500px at 85% -10%,rgba(46,196,192,.14),transparent 60%),radial-gradient(900px 500px at 0% 0%,rgba(27,79,168,.10),transparent 60%),var(--bg);background-attachment:fixed}
-header.hero{position:relative;border-radius:22px;overflow:hidden;margin-bottom:22px;box-shadow:0 18px 40px rgba(15,37,87,.22);background:var(--navy)}
-.hero-img{display:block;width:100%;height:auto;aspect-ratio:960/355}
-.hero-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 24px;padding:16px 24px;color:#fff;
-  background:linear-gradient(100deg,var(--navy) 0%,var(--navy2) 70%,#1d6f9a 100%);border-top:4px solid var(--teal)}
+header.hero{position:relative;border-radius:22px;overflow:hidden;margin-bottom:22px;box-shadow:0 18px 40px rgba(15,37,87,.22);
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,440px);align-items:center;gap:20px;padding:16px;
+  background:linear-gradient(100deg,var(--navy) 0%,var(--navy2) 70%,#1d6f9a 100%);border-bottom:4px solid var(--teal)}
+.hero-img{display:block;width:100%;height:auto;aspect-ratio:960/355;border-radius:14px;box-shadow:0 8px 22px rgba(0,0,0,.28)}
+.hero-bar{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:4px 8px;color:#fff;min-width:0;grid-column:1;grid-row:1}
+.hero-img{grid-column:2;grid-row:1}
 .hero-bar h1{color:#fff;font-size:26px}
 .hero-bar .lede{color:rgba(255,255,255,.78)}
 .hero-bar .pill{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.22);color:#fff;backdrop-filter:blur(4px)}
@@ -188,7 +190,8 @@ input[type=text]:focus,input[type=password]:focus,input[type=search]:focus,selec
 .slide-head{background:linear-gradient(100deg,var(--navy),var(--navy2));padding:9px 16px;border-bottom:3px solid var(--teal)}
 .pv{border-radius:12px}
 aside.pool h3,.arch-h h2,.step h2{color:var(--ink)}
-@media (max-width:560px){header.hero{border-radius:16px}.hero-bar{padding:12px 16px}.hero-bar h1{font-size:21px}}
+@media (max-width:820px){header.hero{grid-template-columns:1fr;gap:12px;padding:12px}.hero-img,.hero-bar{grid-column:1;grid-row:auto}.hero-img{order:-1}}
+@media (max-width:560px){header.hero{border-radius:16px}.hero-bar h1{font-size:21px}}
 </style>
 
 <script src="face-api.js"></script>
