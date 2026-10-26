@@ -416,7 +416,7 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(150px,23
       <label>العنوان <small>Address</small><input type="text" id="piAddr"></label>
       <label>محوَّل من <small>Referred from</small><input type="text" id="piRef"></label>
       <label>الصحة العامة <small>Systemic health</small><input type="text" id="piSys"></label>
-      <label>سجّلها <small>Records By</small><input type="text" id="piBy"></label>
+      <label>سجّلها <small>Records By</small><select id="piBy"><option value="">—</option></select></label>
       <label class="wide">الشكوى الرئيسية بكلام المريض <small>Chief Complaint</small><input type="text" id="piCC"></label>
       <label>تاريخ الإنشاء <small>Date of creation</small><input type="text" id="piDate" placeholder="يوم-شهر-سنة"></label>
     </div>
@@ -1063,7 +1063,7 @@ async function archInit(){
 }
 async function archWho(){
   gateMsg("⏳ جارٍ التحقق من الحساب…");
-  try{const j=await archCall("me");ARCH.user=j.user;archRender();gateMsg("");applySheetAI(j.user&&j.user.aiKey);archMsg("");await archNames();await archTplInfo();
+  try{const j=await archCall("me");ARCH.user=j.user;archRender();try{piDoctors(j.doctors);}catch(_){}gateMsg("");applySheetAI(j.user&&j.user.aiKey);archMsg("");await archNames();await archTplInfo();
     if(!tpl&&ARCH.tplInfo)archLoadTemplate(true);}
   catch(e){ARCH.user=null;if(SHEET_AI)applySheetAI(null);archMsg(e.message,true);gateMsg(e.message,true);try{google.accounts.id.disableAutoSelect();}catch(_){}}
   archRender();
@@ -1363,6 +1363,11 @@ const PI_FIELDS=[
   {id:"piEdu",re:/^\s*educational\s+achievement\s*:/i},{id:"piAddr",re:/^\s*address\s*:/i},{id:"piRef",re:/^\s*referred\s+from\s*:/i},
   {id:"piSys",re:/^\s*systemic\s+health\s*:/i},{id:"piBy",re:/^\s*records?\s+by\s*:/i},{id:"piCC",re:/^\s*chief\s+complaint/i,next:true},
   {id:"piDate",re:/^\s*date\s+of\s+creation\s*:/i}];
+/* a select keeps any value it is given (an option is added when missing) */
+function selSet(e,v){v=String(v||"").trim();if(v&&![...e.options].some(o=>o.value===v)){const o=document.createElement("option");o.value=o.textContent=v;e.appendChild(o);}e.value=v;}
+/* «Records By»: the doctors' names from the Doctors sheet of the platform */
+function piDoctors(list){const e=$("piBy");if(!e||!Array.isArray(list))return;const cur=e.value;
+  e.innerHTML='<option value="">—</option>'+list.map(n=>`<option>${esc(n)}</option>`).join("");selSet(e,cur||(list.length===1?list[0]:""));}
 const piTodayStr=()=>{const d=new Date();return d.getDate()+"-"+(d.getMonth()+1)+"-"+d.getFullYear();};
 const piRunText=r=>{const t=r.getElementsByTagNameNS(NS.a,"t")[0];return t?t.textContent:"";};
 const piSetRun=(r,v)=>{let t=r.getElementsByTagNameNS(NS.a,"t")[0];if(!t){t=r.ownerDocument.createElementNS(NS.a,"a:t");r.appendChild(t);}t.textContent=v;};
@@ -1404,7 +1409,7 @@ async function piSlides(zip){return Object.keys(zip.files).filter(n=>/^ppt\/slid
 /* on template load: the clinic's fixed lines (referred from / systemic health / records by) are taken as the defaults */
 async function piReadTemplate(zip){
   try{for(const path of await piSlides(zip)){const x=await zip.file(path).async("string");if(!/Patient\s+specification|Chief\s+Complaint|Records\s+By/i.test(x))continue;
-    const doc=parseXml(x);for(const L of piLocate(doc)){if(!["piRef","piSys","piBy"].includes(L.f.id))continue;const e=$(L.f.id);if(e&&!e.value.trim())e.value=piRead(L);}}}
+    const doc=parseXml(x);for(const L of piLocate(doc)){if(!["piRef","piSys","piBy"].includes(L.f.id))continue;const e=$(L.f.id);if(e&&!e.value.trim()){if(e.tagName==="SELECT")selSet(e,piRead(L));else e.value=piRead(L);}}}}
   catch(e){console.warn("piReadTemplate",e);}
   if(!$("piDate").value.trim())$("piDate").value=piTodayStr();
 }
@@ -1499,7 +1504,7 @@ async function stRestore(st,getFile){
   const ids=new Set(photos.map(p=>p.id));
   assign={};for(const [k,a] of Object.entries(st.assign||{})){if(!a||!ids.has(a.photoId))continue;if(!slots.find(s=>s.id===k))continue;a.alignKey=null;assign[k]=a;}
   caseChart=st.caseChart||null;
-  for(const [id,v] of Object.entries(st.fields||{})){const e=$(id);if(!e)continue;if(e.type==="checkbox")e.checked=!!v;else e.value=v;}try{syncName();}catch(_){}
+  for(const [id,v] of Object.entries(st.fields||{})){const e=$(id);if(!e)continue;if(e.type==="checkbox")e.checked=!!v;else if(e.tagName==="SELECT")selSet(e,v);else e.value=v;}try{syncName();}catch(_){}
   $("faceScaleOut").textContent=$("faceScale").value+"%";
   renderAll();
   const miss=st.photos.length-photos.length;
