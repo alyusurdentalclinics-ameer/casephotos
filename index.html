@@ -272,6 +272,16 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(150px,23
 .arch-chk label.chk{flex:1;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:var(--surface2);font-weight:700;color:var(--ink);white-space:nowrap}
 .arch-chk label.chk:has(input:checked){border-color:var(--teal);background:var(--teal-soft)}
 .arch-chk input:disabled+*{opacity:.5}
+.gate{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:16px;
+  background:radial-gradient(900px 500px at 80% 0%,rgba(43,220,200,.35),transparent 60%),linear-gradient(135deg,#0B1D4A 0%,#173A86 55%,#22A9B8 100%)}
+.gate-card{width:min(420px,100%);background:#fff;border-radius:24px;padding:28px 24px;text-align:center;box-shadow:0 30px 60px rgba(0,0,0,.35);position:relative;overflow:hidden}
+.gate-card::before{content:"";position:absolute;inset-inline:0;top:0;height:6px;background:linear-gradient(90deg,#2BDCC8,#3B82C4)}
+.gate-logo{width:170px;max-width:70%;height:auto;margin:6px auto 10px;display:block}
+.gate-card h1{font-size:20px;color:#0B1D4A;margin:0 0 6px}
+.gate-sub{margin:0 0 18px;color:#5A6D78;font-size:13.5px}
+.gate-btn{display:flex;justify-content:center;min-height:44px}
+.gate-msg{margin-top:14px;font-size:13px;color:#5A6D78;min-height:1.6em}
+.gate-msg.bad{color:#B8322A;font-weight:700}
 </style>
 
 <script src="face-api.js"></script>
@@ -446,6 +456,15 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(150px,23
   <div class="ap-body">
     <div class="ap-res"><div class="status" id="apStatus" role="status"></div><div class="bar" id="apBar" hidden><i></i></div><div id="apList"></div></div>
     <div class="ap-view" id="apView" hidden><div class="ap-vh"><b id="apVName"></b><span style="flex:1"></span><button id="apVAlt" type="button" hidden></button><button class="btn sm" id="apVDl" type="button">⬇ تنزيل PowerPoint</button><button class="btn sm" id="apVClose" type="button">→ رجوع لبطاقة المريض</button></div><div class="ap-pages" id="apPages"></div><iframe id="apFrame" title="عرض الملف" hidden></iframe></div>
+  </div>
+</div>
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <img class="gate-logo" id="gateLogo" alt="Al Yusur Specialized Dental Clinics">
+    <h1>عيادات اليسر لطب الأسنان التخصصي</h1>
+    <p class="gate-sub">الدخول للمخوَّلين فقط — سجّل الدخول بحساب Google المسجَّل لدى العيادة</p>
+    <div id="gateBtn" class="gate-btn"></div>
+    <div class="gate-msg" id="gateMsg" role="status">⏳ جارٍ التحقق…</div>
   </div>
 </div>
 <div class="toast" id="toast" hidden></div>
@@ -1019,21 +1038,25 @@ function loadGsi(){
 }
 async function archInit(){
   archRender();if(!archReady())return;
-  try{await loadGsi();}catch(e){archMsg(e.message,true);return;}
+  try{$("gateLogo").src=document.querySelector(".hero-logo img").src;}catch(_){}
+  try{await loadGsi();}catch(e){archMsg(e.message,true);gateMsg(e.message,true);return;}
   google.accounts.id.initialize({client_id:archCfg.client,auto_select:true,cancel_on_tap_outside:true,
     callback:async r=>{ARCH.token=r.credential;try{sessionStorage.setItem("cp_idtoken",r.credential);}catch(_){}await archWho();}});
   $("gsiBtn").innerHTML="";google.accounts.id.renderButton($("gsiBtn"),{theme:"outline",size:"medium",text:"signin_with",locale:"ar"});
-  if(ARCH.token)await archWho();else google.accounts.id.prompt();
+  $("gateBtn").innerHTML="";google.accounts.id.renderButton($("gateBtn"),{theme:"filled_blue",size:"large",text:"signin_with",shape:"pill",locale:"ar"});
+  if(ARCH.token)await archWho();else{gateMsg("");google.accounts.id.prompt();}
 }
 async function archWho(){
-  try{const j=await archCall("me");ARCH.user=j.user;applySheetAI(j.user&&j.user.aiKey);archMsg("");await archNames();await archTplInfo();
+  gateMsg("⏳ جارٍ التحقق من الحساب…");
+  try{const j=await archCall("me");ARCH.user=j.user;archRender();gateMsg("");applySheetAI(j.user&&j.user.aiKey);archMsg("");await archNames();await archTplInfo();
     if(!tpl&&ARCH.tplInfo)archLoadTemplate(true);}
-  catch(e){ARCH.user=null;if(SHEET_AI)applySheetAI(null);archMsg(e.message,true);}
+  catch(e){ARCH.user=null;if(SHEET_AI)applySheetAI(null);archMsg(e.message,true);gateMsg(e.message,true);try{google.accounts.id.disableAutoSelect();}catch(_){}}
   archRender();
 }
 function archMsg(t,bad){const el=$("archStatus");el.textContent=t||"";el.style.color=bad?"#B00000":"";}
+function gateMsg(t,bad){const m=$("gateMsg");if(!m)return;m.textContent=t||"";m.classList.toggle("bad",!!bad);}
 function archRender(){
-  const signed=!!ARCH.user;
+  const signed=!!ARCH.user;$("gate").hidden=signed;document.documentElement.style.overflow=signed?"":"hidden";
   $("archUser").textContent=signed?`🟢 ${ARCH.user.email}${ARCH.user.role==="admin"?" · مدير":""}`:"⚪ غير متصل — سجّل الدخول";
   $("gsiBtn").hidden=signed||!archReady();$("archOut").hidden=!signed;
   $("archSave").disabled=!signed;$("archStateSave").disabled=!signed;$("archTplSave").hidden=true;$("archTplSave").disabled=!signed||!tpl||ARCH.busy;
@@ -1292,7 +1315,7 @@ async function archLoadTemplate(silent){
   catch(e){archMsg("تعذّر تحميل قالب المنصة: "+e.message,true);}
   finally{ARCH.busy=false;setBar("archBar",null);archRender();}
 }
-/*__ARCH_BIND__*/$("archOut").onclick=()=>{ARCH.user=null;applySheetAI(null);ARCH.token=null;try{sessionStorage.removeItem("cp_idtoken");google.accounts.id.disableAutoSelect();}catch(_){}archMsg("");archRender();};
+/*__ARCH_BIND__*/$("archOut").onclick=()=>{ARCH.user=null;applySheetAI(null);ARCH.token=null;try{sessionStorage.removeItem("cp_idtoken");google.accounts.id.disableAutoSelect();}catch(_){}archMsg("");archRender();gateMsg("✓ سجّلت الخروج.");try{apClose();}catch(_){}};
 // the two ticks: saved with «إنشاء العرض» (remembered on this device)
 for(const id of ["archSave","archStateSave"]){try{$(id).checked=localStorage.getItem("cp_"+id)==="1";}catch(_){}
   $(id).onchange=()=>{try{localStorage.setItem("cp_"+id,$(id).checked?"1":"0");}catch(_){}};}
