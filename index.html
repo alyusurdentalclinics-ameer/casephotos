@@ -3738,7 +3738,7 @@ async function openZoomView(s,pic,title){
   //   slide 2: the red midline · slide 4: the face midline (blue) · slides 6/7: the profile line (blue)
   const VA=!pic&&assign[s.id]||null;
   const VL=!VA?null:HA&&HA.lines.mid!=null?{k:"mid",x:HA.lines.mid,c:"#E02020"}
-    :isMidSlot(s)&&VA.fmid!=null?{k:"fmid",x:VA.fmid,c:"#4A90D9"}
+    :isMidSlot(s)&&VA.fmid!=null?{k:"fmid",x:VA.fmid,c:s.cat==="frontal_lips_apart"?"#E02020":"#4A90D9"}
     :isProfLineSlot(s)&&VA.prof?{k:"prof",x:VA.prof.x,y1:VA.prof.y1,y2:VA.prof.y2,c:"#4A90D9"}
     :isIoMidSlot(s)?{k:"io",x:ioMidX(s),c:"#4A90D9"}:null;
   const VX0=VL?VL.x:null;
@@ -4984,7 +4984,7 @@ function drawSlidePreview(sec,list,bigW){
         g.restore();
       }
       if(isIoMidSlot(s)){const fr=frameRect(s),x=(fr.left+ioMidX(s)*fr.w)*k,ex=fr.h*.08*k;g.save();g.strokeStyle="#4A90D9";g.lineWidth=2;g.beginPath();g.moveTo(x,top-ex);g.lineTo(x,top+dh+ex);g.stroke();g.restore();}
-      if(a.fmid!=null&&isMidSlot(s)){const fr=frameRect(s),x=(fr.left+a.fmid*fr.w)*k;g.save();g.strokeStyle="#4A90D9";g.lineWidth=1.5;g.beginPath();g.moveTo(x,top);g.lineTo(x,top+dh);g.stroke();g.restore();}
+      if(a.fmid!=null&&isMidSlot(s)){const fr=frameRect(s),x=(fr.left+a.fmid*fr.w)*k;g.save();g.strokeStyle=s.cat==="frontal_lips_apart"?"#E02020":"#4A90D9";g.lineWidth=1.5;g.beginPath();g.moveTo(x,top);g.lineTo(x,top+dh);g.stroke();g.restore();}
       if(a.prof){const T=profileLineOnSlide(s,a.prof);g.save();g.strokeStyle="#4A90D9";g.lineWidth=2;g.beginPath();g.moveTo(T.x*k,T.y1*k);g.lineTo(T.x*k,T.y2*k);g.stroke();g.restore();}
       if(a.stick){const T=stickOnSlide(s,a.stick);g.save();g.strokeStyle="#4A90D9";g.lineWidth=2;g.beginPath();g.moveTo(T.x1*k,T.y1*k);g.lineTo(T.x2*k,T.y2*k);g.stroke();
         // eye line through both pupils, exactly as it is written into the slide
@@ -5036,7 +5036,7 @@ function addFaceMidlines(doc,list){
   if(list.some(s=>isMidSlot(s)&&assign[s.id]&&assign[s.id].photoId&&assign[s.id].fmid!=null))removeTemplateLines(doc,"v");
   for(const s of list){const a=assign[s.id];if(!isMidSlot(s)||!a||!a.photoId||a.fmid==null)continue;
     const f=frameRect(s),x=f.left+a.fmid*f.w;
-    const el=newLine(doc,"Face midline",19050,"4A90D9"),xf=el.getElementsByTagNameNS(NS.a,"xfrm")[0];
+    const el=newLine(doc,"Face midline",19050,s.cat==="frontal_lips_apart"?"E02020":"4A90D9"),xf=el.getElementsByTagNameNS(NS.a,"xfrm")[0];   // slide 4: the Lips apart line is red
     xf.getElementsByTagNameNS(NS.a,"off")[0].setAttribute("x",String(Math.round(x)));xf.getElementsByTagNameNS(NS.a,"off")[0].setAttribute("y",String(Math.round(f.top)));
     xf.getElementsByTagNameNS(NS.a,"ext")[0].setAttribute("cy",String(Math.round(f.h)));}
 }
