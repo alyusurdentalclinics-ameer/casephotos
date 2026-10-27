@@ -5617,10 +5617,9 @@ $("genBtn").onclick=async()=>{try{syncName();}catch(_){}
         const items=list.filter(s=>isProfLineSlot(s)&&assign[s.id]&&assign[s.id].photoId&&assign[s.id].prof).map(s=>profileLineOnSlide(s,assign[s.id].prof));
         if(items.length)fitProfileLines(doc,items);
         // slides 6 and 7: the horizontal guide lines are for the program only - not in the file
-        // (fix: the "else" below belonged to the slide-7 test, so the lines were added again right after being removed)
         if(list.some(s=>s.k===6||s.k===7||s.k===8)){removeAutoLines(doc,new Set(["Head top line","Eye line","Chin line","Ear top line","Ear bottom line"]));removeTemplateLines(doc,"h");}
-        else addProfileGuides(doc,list);
         if(list.some(s=>s.k===7))removeTemplateLines(doc,"v");   // slide 7: no vertical line either
+        else if(!list.some(s=>s.k===6))addProfileGuides(doc,list);   // slide 6: no horizontal lines in the file
       }
       if($("fitLines").checked)fitEyeGuideLine(doc,list);
       fitIntraoralMidline(doc,list);
