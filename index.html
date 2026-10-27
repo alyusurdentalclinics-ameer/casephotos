@@ -1478,15 +1478,6 @@ async function oaFill(zip){
     if(n)zip.file(path,ser(doc));
   }
 }
-/* PowerPoint file only (the program is not touched): every "Profile View" slide loses its horizontal lines */
-async function dropProfileHLines(zip){
-  for(const path of await piSlides(zip)){
-    const x=await zip.file(path).async("string");if(!/Profile\s*View/i.test(x))continue;
-    const doc=parseXml(x),n0=doc.getElementsByTagNameNS(NS.p,"cxnSp").length;
-    removeAutoLines(doc,new Set(["Head top line","Eye line","Chin line","Ear top line","Ear bottom line"]));removeTemplateLines(doc,"h");
-    if(doc.getElementsByTagNameNS(NS.p,"cxnSp").length!==n0)zip.file(path,ser(doc));
-  }
-}
 /* on generate: the values typed in the program go into the slide */
 async function piFill(zip){
   const val=id=>{const e=$(id);let v=e?e.value.trim():"";if(id==="piName"&&!v)v=($("outName").value||"").trim();if(id==="piDate"&&!v)v=piTodayStr();return v;};
@@ -5645,7 +5636,6 @@ $("genBtn").onclick=async()=>{try{syncName();}catch(_){}
     for(const b of fullCache.values())b.close&&b.close();
     zip.file("[Content_Types].xml",ser(ctDoc));
     status("جارٍ كتابة بيانات المريض…");await piFill(zip);await oaFill(zip);
-    await dropProfileHLines(zip);
 
     if(dropPaths.size){status(`جارٍ حذف ${arNum(dropPaths.size)} شريحة فارغة…`);await dropSlides(zip,dropPaths);}
     status("جارٍ حذف صور المريض السابق غير المستخدمة…");setBar("genBar",.85);
