@@ -320,6 +320,9 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(200px,34
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .pc-info b{color:#E2EBF0}}
 /* all the information in one row on wide screens */
 @media (min-width:1100px){.pc-info{display:flex!important;flex-wrap:nowrap}.pc-info span{flex:1 1 0;min-width:0;padding:7px 8px}.pc-info b{font-size:15px;overflow-wrap:anywhere}}
+.arch-g{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))!important}
+.arch-col{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--surface2)}
+.arch-col>b{font-size:14px;color:#0B1D4A}
 </style>
 
 <script src="face-api.js"></script>
@@ -438,6 +441,17 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(200px,34
       <label>سجّلها <small>Records By</small><select id="piBy"><option value="">—</option></select></label>
       <label class="wide">الشكوى الرئيسية بكلام المريض <small>Chief Complaint</small><input type="text" id="piCC"></label>
       <label>تاريخ الإنشاء <small>Date of creation</small><input type="text" id="piDate" placeholder="يوم-شهر-سنة"></label>
+    </div>
+    <div class="pinfo-h" style="margin-top:14px"><h2>🦷 الفكّان <small>(تُكتب بشريحة «Occlusal Intraoral» — Upper arch / Lower arch)</small></h2></div>
+    <div class="pinfo-g arch-g">
+      <div class="arch-col"><b>Upper arch — الفك العلوي</b>
+        <label>الأسنان المفقودة <small>Missing teeth</small><input type="text" id="oaUM" value="NO"></label>
+        <label>الدوران <small>Rotation</small><input type="text" id="oaUR" value="NO"></label>
+        <label>التزاحم <small>Crowding</small><input type="text" id="oaUC" value="NO"></label></div>
+      <div class="arch-col"><b>Lower arch — الفك السفلي</b>
+        <label>الأسنان المفقودة <small>Missing teeth</small><input type="text" id="oaLM" value="NO"></label>
+        <label>الدوران <small>Rotation</small><input type="text" id="oaLR" value="NO"></label>
+        <label>التزاحم <small>Crowding</small><input type="text" id="oaLC" value="NO"></label></div>
     </div>
   </section>
 
@@ -1437,6 +1451,25 @@ async function piReadTemplate(zip){
   catch(e){console.warn("piReadTemplate",e);}
   if(!$("piDate").value.trim())$("piDate").value=piTodayStr();
 }
+
+/* slide 14 (occlusal): the values after "Missing teeth:", "Rotation:", "Crowding:" - first block under "Upper arch",
+   second under "Lower arch" (the label stays with its formatting, only the value changes) */
+const OA_FIELDS=[{k:"M",re:/^\s*missing\s+teeth\s*:/i},{k:"R",re:/^\s*rotations?\s*:/i},{k:"C",re:/^\s*crowding\s*:/i}];
+async function oaFill(zip){
+  for(const path of await piSlides(zip)){
+    const x=await zip.file(path).async("string");if(!/Upper\s+arch|Lower\s+arch/i.test(x))continue;
+    const doc=parseXml(x);let arch=null,n=0;
+    for(const para of doc.getElementsByTagNameNS(NS.a,"p")){
+      const txt=[...para.getElementsByTagNameNS(NS.a,"t")].map(t=>t.textContent).join("");
+      if(/upper\s+arch/i.test(txt))arch="U";else if(/lower\s+arch/i.test(txt))arch="L";if(!arch)continue;
+      const kids=[...para.children].filter(c=>c.localName==="r"||c.localName==="br");
+      for(let i=0;i<kids.length;i++){const k=kids[i];if(k.localName!=="r")continue;const f=OA_FIELDS.find(f=>f.re.test(piRunText(k)));if(!f)continue;
+        const vals=[];for(let j=i+1;j<kids.length;j++){const c=kids[j];if(c.localName==="br"||OA_FIELDS.some(g=>g.re.test(piRunText(c))))break;vals.push(c);}
+        const e=$("oa"+arch+f.k);if(!e)continue;piWrite({f:{re:f.re},label:k,vals,nextRuns:null},e.value.trim());n++;}
+    }
+    if(n)zip.file(path,ser(doc));
+  }
+}
 /* on generate: the values typed in the program go into the slide */
 async function piFill(zip){
   const val=id=>{const e=$(id);let v=e?e.value.trim():"";if(id==="piName"&&!v)v=($("outName").value||"").trim();if(id==="piDate"&&!v)v=piTodayStr();return v;};
@@ -1449,7 +1482,7 @@ async function piFill(zip){
 }
 if(!$("piDate").value)$("piDate").value=piTodayStr();
 
-const STATE_FIELDS=["outName","piName","piGender","piAge","piEdu","piAddr","piRef","piSys","piBy","piCC","piDate","closeup","evenFrames","whiteBg","levelBrows","fitLines","alignFaces","faceScale","dropEmpty","blankEmpty"];
+const STATE_FIELDS=["oaUM","oaUR","oaUC","oaLM","oaLR","oaLC","outName","piName","piGender","piAge","piEdu","piAddr","piRef","piSys","piBy","piCC","piDate","closeup","evenFrames","whiteBg","levelBrows","fitLines","alignFaces","faceScale","dropEmpty","blankEmpty"];
 const P_SKIP=new Set(["file","prev","bg","faceCache","aiBlob","thumbUrl","frame","_wbm","occlBusy","ojBusy","ojAutoTried","occlAutoTried","w","h","video"]);
 const ST_KEEP=4, STATE_MIME="application/zip";
 function stStringify(v){
@@ -2441,6 +2474,9 @@ const MA_CATS=new Set(["ma_frontal","ma_profile","ma_threeq"]);   // jaw-forward
 const ec=s=>!s?"":s.k===15?({io_frontal:"e2e_front",io_right:"e2e_right",io_left:"e2e_left"}[s.cat]||s.cat):(s.cat||"");
 const isMA=s=>!!s&&(MA_CATS.has(s.cat)||s.k===10);   // slide 10 (Mandibular Advancement) - its frames hold the resting photos again
 const PROFILE_CATS=new Set(["profile_right_rest","profile_right_smile","profile_left_rest","profile_left_smile"]);
+const THREEQ_CATS=new Set(["threeq_rest","threeq_smile","threeq_left_rest","threeq_left_smile"]);
+/* the slots that get a vertical profile line: profile photos and three-quarter photos (not jaw advancement) */
+const isProfLineSlot=s=>!!s&&!s.video&&s.k!==10&&s.k!==15&&(PROFILE_CATS.has(s.cat)||THREEQ_CATS.has(s.cat));
 const FACE_CATS=new Set([...FRONTAL_CATS,"profile_right_rest","profile_right_smile","profile_left_rest","profile_left_smile","threeq_rest","threeq_smile","threeq_left_rest","threeq_left_smile","ma_profile","ma_threeq"]);
 let faceInit=null;
 function initFace(){
@@ -3690,14 +3726,21 @@ async function openZoomView(s,pic,title){
   // slide 2 (face heights): the brow / nose / chin lines can be moved up and down here
   const HA=!pic&&isHeightsSlot(s)&&assign[s.id]&&assign[s.id].lines?assign[s.id]:null;
   const LL=HA?{brow:HA.lines.brow,nose:HA.lines.nose,chin:HA.lines.chin}:null;if(LL)guides=null;
+  // the vertical line of the photo moves left / right with the arrows (¼ % of the width a press, Shift: 1 %)
+  //   slide 2: the red midline · slide 4: the face midline (blue) · slides 6/7: the profile line (blue)
+  const VA=!pic&&assign[s.id]||null;
+  const VL=!VA?null:HA&&HA.lines.mid!=null?{k:"mid",x:HA.lines.mid,c:"#E02020"}
+    :isMidSlot(s)&&VA.fmid!=null?{k:"fmid",x:VA.fmid,c:"#4A90D9"}
+    :isProfLineSlot(s)&&VA.prof?{k:"prof",x:VA.prof.x,y1:VA.prof.y1,y2:VA.prof.y2,c:"#4A90D9"}:null;
+  const VX0=VL?VL.x:null;
   const hRes=()=>{if(!LL)return "";const m=LL.nose-LL.brow,lo=LL.chin-LL.nose;if(!(m>0))return "";const d=(lo-m)/m*100;
     return `حاجب→أنف ${(m/(LL.chin-LL.brow)*100).toFixed(1)}٪ · أنف→ذقن ${(lo/(LL.chin-LL.brow)*100).toFixed(1)}٪ · الفرق ${d>=0?"+":""}${d.toFixed(1)}٪ ${Math.abs(d)<3?"(متساويان تقريباً)":d>0?"(السفلي أطول)":"(السفلي أقصر)"}`;};
   const ov=document.createElement("div");
   ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;overflow:hidden;box-sizing:border-box;max-width:100%;max-height:100%;font-family:Tajawal,Tahoma,sans-serif";
   ov.innerHTML=`<button class="btn sm" data-z="no" type="button" title="إغلاق" style="position:absolute;top:10px;left:10px;z-index:3;font-size:20px;line-height:1;padding:6px 12px;background:#C00000;color:#fff;border-radius:50%">✕</button><div style="display:flex;gap:6px 8px;align-items:center;padding:8px 12px 8px 64px;color:#fff;flex-wrap:wrap;background:#0a1014;min-width:0;max-width:100%;box-sizing:border-box;flex:none">
-    <b style="font-size:18px">تكبير — ${esc(title||s.label)}</b>${LL?`<span class="res" style="background:#fff;color:#000;font-weight:700;padding:3px 10px;border-radius:6px;direction:rtl"></span>`:""}<span style="opacity:.8;font-size:13px;flex:1 1 260px;min-width:0">${LL?"اسحب خط الحاجب أو الأنف أو الذقن للأعلى أو الأسفل (عمودياً فقط) · اسحب الصورة للتنقل · عجلة الماوس للتكبير · الشريط الثاني بطول الأول للمقارنة":"اسحب الصورة للتنقل · عجلة الماوس أو ＋/－ للتكبير · Esc للإغلاق"}</span>
+    <b style="font-size:18px">تكبير — ${esc(title||s.label)}</b>${LL?`<span class="res" style="background:#fff;color:#000;font-weight:700;padding:3px 10px;border-radius:6px;direction:rtl"></span>`:""}<span style="opacity:.8;font-size:13px;flex:1 1 260px;min-width:0">${VL&&!LL?"الأسهم ← → تحرك الخط العمودي يمين ويسار (Shift: أسرع) · ":""}${LL?"الأسهم ← → تحرك الخط الأحمر يمين ويسار · اسحب خط الحاجب أو الأنف أو الذقن للأعلى أو الأسفل (عمودياً فقط) · اسحب الصورة للتنقل · عجلة الماوس للتكبير · الشريط الثاني بطول الأول للمقارنة":"اسحب الصورة للتنقل · عجلة الماوس أو ＋/－ للتكبير · Esc للإغلاق"}</span>
     <span style="flex:1"></span>${guides?`<label style="font-size:13px"><input type="checkbox" class="gl" checked> خطوط الشريحة</label>`:""}${LL?`<button class="btn sm" data-z="auto" type="button" title="يرجع الخطوط لمكانها التلقائي">↺ الخطوط التلقائية</button>`:""}
-    <button class="btn sm" data-z="in">＋ تكبير</button><button class="btn sm" data-z="out">－ تصغير</button><button class="btn sm" data-z="fit">ملء الشاشة</button>${LL?`<button class="btn sm" data-z="ok" style="background:#1f8f4e;color:#fff">✓ اعتماد</button><button class="btn sm" data-z="cancel">إلغاء</button>`:`<button class="btn sm" data-z="no">✕ إغلاق</button>`}</div>
+    <button class="btn sm" data-z="in">＋ تكبير</button><button class="btn sm" data-z="out">－ تصغير</button><button class="btn sm" data-z="fit">ملء الشاشة</button>${VL?`<button class="btn sm" data-z="vl" type="button" title="يسار">◀</button><button class="btn sm" data-z="vr" type="button" title="يمين">▶</button>`:""}${LL||VL?`<button class="btn sm" data-z="ok" style="background:#1f8f4e;color:#fff">✓ اعتماد</button><button class="btn sm" data-z="cancel">إلغاء</button>`:`<button class="btn sm" data-z="no">✕ إغلاق</button>`}</div>
     <canvas style="flex:1 1 0;width:100%;min-height:0;min-width:0;max-width:100%;display:block;cursor:grab;touch-action:none"></canvas>`;
   zoomHeaderLayout(ov);document.body.appendChild(ov);
   const cv=ov.querySelector("canvas"),g=cv.getContext("2d");
@@ -3714,13 +3757,15 @@ async function openZoomView(s,pic,title){
       const nm={brow:"الحاجب",nose:"الأنف",chin:"الذقن"};
       for(const k of ["brow","nose","chin"]){const y=Y(LL[k]);g.strokeStyle=hSel===k?"#FFD800":"#4A90D9";g.lineWidth=hSel===k?3:2;g.beginPath();g.moveTo(0,y);g.lineTo(vw,y);g.stroke();
         g.font="bold 14px Tajawal,sans-serif";g.textBaseline="bottom";g.lineWidth=3;g.strokeStyle="rgba(0,0,0,.6)";g.strokeText(nm[k],X(.02),y-3);g.fillStyle=hSel===k?"#FFD800":"#fff";g.fillText(nm[k],X(.02),y-3);}
-      if(HA.lines.mid!=null){g.strokeStyle="#E02020";g.lineWidth=2;g.beginPath();g.moveTo(X(HA.lines.mid),0);g.lineTo(X(HA.lines.mid),vh);g.stroke();}
+
       // the two bars as on the slide: brow→nose, and the same length again from the nose (for comparison with the chin line)
       const bx=X(.96);g.lineCap="round";g.strokeStyle="#4A90D9";g.lineWidth=8;
       g.beginPath();g.moveTo(bx,Y(LL.brow));g.lineTo(bx,Y(LL.nose));g.stroke();
       g.beginPath();g.moveTo(bx-14,Y(LL.nose));g.lineTo(bx-14,Y(2*LL.nose-LL.brow));g.stroke();
       g.strokeStyle="#E02020";g.lineWidth=3;g.beginPath();g.moveTo(bx-30,Y(2*LL.nose-LL.brow));g.lineTo(bx-30,Y(LL.chin));g.stroke();
-      g.restore();const rs=ov.querySelector(".res");if(rs)rs.textContent=hRes();}};
+      g.restore();const rs=ov.querySelector(".res");if(rs)rs.textContent=hRes();}
+    if(VL){const X=u=>(u*BW-cx)*z+vw/2,Y=v=>(v*BH-cy)*z+vh/2,x=X(VL.x);g.save();g.strokeStyle=VL.c;g.lineWidth=3;g.beginPath();
+      g.moveTo(x,VL.y1!=null?Y(VL.y1):0);g.lineTo(x,VL.y2!=null?Y(VL.y2):vh);g.stroke();g.restore();}};
   const zoomAt=(f,mx,my)=>{const bx=(mx-vw/2)/z+cx,by=(my-vh/2)/z+cy;z=Math.max(zmin(),Math.min(14,z*f));cx=bx-(mx-vw/2)/z;cy=by-(my-vh/2)/z;draw();};
   let last=null,hDrag=null;var hSel=null;
   const hitLine=my=>{if(!LL)return null;let best=null,bd=14;for(const k of ["brow","nose","chin"]){const d=Math.abs((LL[k]*BH-cy)*z+vh/2-my);if(d<bd){bd=d;best=k;}}return best;};
@@ -3735,17 +3780,25 @@ async function openZoomView(s,pic,title){
   cv.addEventListener("dblclick",e=>{const r=cv.getBoundingClientRect();zoomAt(2,e.clientX-r.left,e.clientY-r.top);});
   cv.addEventListener("wheel",e=>{e.preventDefault();const r=cv.getBoundingClientRect();zoomAt(e.deltaY<0?1.15:1/1.15,e.clientX-r.left,e.clientY-r.top);},{passive:false});
   const key=e=>{if(e.key==="Escape")close();else if(e.key==="+"||e.key==="=")zoomAt(1.3,vw/2,vh/2);else if(e.key==="-")zoomAt(1/1.3,vw/2,vh/2);
+    else if(VL&&(e.key==="ArrowLeft"||e.key==="ArrowRight")){e.preventDefault();vMove((e.key==="ArrowRight"?1:-1)*(e.shiftKey?4:1));}
     else if(LL&&hSel&&(e.key==="ArrowUp"||e.key==="ArrowDown")){e.preventDefault();const st=(e.shiftKey?5:1)/BH*4;LL[hSel]+=e.key==="ArrowUp"?-st:st;
       LL.brow=Math.min(LL.brow,LL.nose-.02);LL.chin=Math.max(LL.chin,LL.nose+.02);draw();}};
   document.addEventListener("keydown",key);
   const onRs=()=>{fit();draw();};window.addEventListener("resize",onRs);
   const close=()=>{document.removeEventListener("keydown",key);window.removeEventListener("resize",onRs);ov.remove();};
   const gl=ov.querySelector(".gl");if(gl)gl.onchange=draw;
-  const saveLines=()=>{if(!LL)return;const ch=["brow","nose","chin"].some(k=>Math.abs(LL[k]-HA.lines[k])>1e-5);
-    if(ch){HA.lines=Object.assign({},HA.lines,LL);HA.linesMan=true;renderSlides();}};
+  function vMove(n){VL.x=Math.max(0,Math.min(1,VL.x+n*.0025));draw();}
+  const saveV=()=>{if(!VL||Math.abs(VL.x-VX0)<1e-6)return false;
+    if(VL.k==="mid"){HA.lines=Object.assign({},HA.lines,{mid:VL.x});HA.linesMan=true;}
+    else if(VL.k==="fmid"){VA.fmid=VL.x;VA.fmidMan=true;}
+    else{VA.prof=Object.assign({},VA.prof,{x:VL.x});VA.profMan=true;}
+    return true;};
+  const saveLines=()=>{if(!LL){if(saveV())renderSlides();return;}saveV();const ch=["brow","nose","chin"].some(k=>Math.abs(LL[k]-HA.lines[k])>1e-5);
+    if(ch){HA.lines=Object.assign({},HA.lines,LL);HA.linesMan=true;}if(ch||VL)renderSlides();};
   ov.querySelectorAll("[data-z]").forEach(b=>b.onclick=()=>{const v=b.dataset.z;if(v==="in")zoomAt(1.3,vw/2,vh/2);else if(v==="out")zoomAt(1/1.3,vw/2,vh/2);else if(v==="fit"){z=zmin();cx=BW/2;cy=BH/2;draw();}
     else if(v==="auto"){HA.lines=null;HA.linesMan=false;HA.alignKey=null;close();renderSlides();scheduleAlign();toast("رجعت الخطوط التلقائية.");}
-    else if(v==="ok"||(v==="no"&&LL)){saveLines();close();}else close();});
+    else if(v==="vl")vMove(-1);else if(v==="vr")vMove(1);
+    else if(v==="ok"||(v==="no"&&(LL||VL))){saveLines();close();}else close();});
   draw();
 }
 /* ---------- Slide 16: Overjet / Overbite measured on the ruler photos ----------
@@ -4359,6 +4412,9 @@ function fitProfileLines(doc,items){
     return o&&e&&+e.getAttribute("cx")===0&&+e.getAttribute("cy")>5e5?{o,e,x:+o.getAttribute("x")}:null;
   }).filter(Boolean).sort((a,b)=>a.x-b.x);
   items.sort((a,b)=>a.x-b.x);
+  // fewer lines in the template than photos: a new blue line for each missing one
+  while(lines.length<items.length){const el=newLine(doc,"Profile line",19050,"4A90D9"),xf=el.getElementsByTagNameNS(NS.a,"xfrm")[0];
+    lines.push({o:[...xf.children].find(c=>c.localName==="off"),e:[...xf.children].find(c=>c.localName==="ext"),x:1e12});}
   items.forEach((T,i)=>{const L=lines[i];if(!L)return;
     L.o.setAttribute("x",String(Math.round(T.x)));L.o.setAttribute("y",String(Math.round(T.y1)));L.e.setAttribute("cy",String(Math.max(1,Math.round(T.y2-T.y1))));});
 }
@@ -4794,14 +4850,14 @@ async function scheduleAlign(){
         }
         for(const s of slots){
           const a=assign[s.id];
-          if(!a||!a.align||!isMidSlot(s)||(a.fmid!=null&&a.fmidKey===a.alignKey&&a.fmidTd===a.align.td))continue;
+          if(!a||!a.align||!isMidSlot(s)||a.fmidMan&&a.fmid!=null||(a.fmid!=null&&a.fmidKey===a.alignKey&&a.fmidTd===a.align.td))continue;
           const p=photos.find(x=>x.id===a.photoId);if(!p)continue;
           const g0=G(s),turned=g0.rot===90||g0.rot===270,ar=(turned?g0.cy:g0.cx)/(turned?g0.cx:g0.cy);
           const H=1200,W=Math.round(H*ar);
           let full=null;try{full=await createImageBitmap(p.file,{imageOrientation:"from-image"});}catch(_){}
           const D=renderDisplayed(full||p.prev,{rot:a.rot,flip:a.flip,align:effAlign(a),bg:p.bg,zoom:a.zoom,tilt:a.tilt,level:a.eyeLevel,dx:a.dx,dy:a.dy,nudged:!!(a.dx||a.dy||(a.zoom&&a.zoom!==1))},W,H);
           if(full&&full.close)full.close();
-          a.fmid=await measureOuterMid(D);a.fmidTd=a.align.td;a.fmidKey=a.alignKey;
+          a.fmid=await measureOuterMid(D);a.fmidMan=false;a.fmidTd=a.align.td;a.fmidKey=a.alignKey;
         }
         for(const s of slots){
           const a=assign[s.id];
@@ -4822,12 +4878,12 @@ async function scheduleAlign(){
         }
         for(const s of slots){
           const a=assign[s.id];
-          if(!a||!a.align||!PROFILE_CATS.has(s.cat)||s.k===10||!$("fitLines").checked||(a.prof!==undefined&&a.profTd===a.align.td&&a.profKey===a.alignKey))continue;
+          if(!a||!a.align||!isProfLineSlot(s)||!$("fitLines").checked||a.profMan&&a.prof||(a.prof!==undefined&&a.profTd===a.align.td&&a.profKey===a.alignKey))continue;
           const p=photos.find(x=>x.id===a.photoId);if(!p)continue;
           const g0=G(s),turned=g0.rot===90||g0.rot===270,ar=(turned?g0.cy:g0.cx)/(turned?g0.cx:g0.cy);
           const H=1200,W=Math.round(H*ar);
           const D=renderDisplayed(p.prev,{rot:a.rot,flip:a.flip,align:effAlign(a),bg:p.bg,zoom:a.zoom,tilt:a.tilt,level:a.eyeLevel,dx:a.dx,dy:a.dy,nudged:!!(a.dx||a.dy||(a.zoom&&a.zoom!==1))},W,H);
-          {const pc=(photos.find(x=>x.id===a.photoId)||{}).cat||s.cat;a.prof=await measureProfile(D,/_right_/.test(pc)?1:/_left_/.test(pc)?-1:0);}a.profTd=a.align.td;a.profKey=a.alignKey;
+          {const pc=(photos.find(x=>x.id===a.photoId)||{}).cat||s.cat;a.prof=await measureProfile(D,/_right_/.test(pc)?1:/_left_/.test(pc)?-1:0);a.profMan=false;}a.profTd=a.align.td;a.profKey=a.alignKey;
         }
         renderSlides();renderSummary();
       }
@@ -4914,7 +4970,7 @@ function drawSlidePreview(sec,list,bigW){
         g.beginPath();g.moveTo(bx+10,Y.nose*k);g.lineTo(bx+10,(2*Y.nose-Y.brow)*k);g.stroke();
         g.restore();
       }
-      if(a.fmid!=null&&isMidSlot(s)){const fr=frameRect(s),x=(fr.left+a.fmid*fr.w)*k;g.save();g.strokeStyle="#E02020";g.lineWidth=1.5;g.beginPath();g.moveTo(x,top);g.lineTo(x,top+dh);g.stroke();g.restore();}
+      if(a.fmid!=null&&isMidSlot(s)){const fr=frameRect(s),x=(fr.left+a.fmid*fr.w)*k;g.save();g.strokeStyle="#4A90D9";g.lineWidth=1.5;g.beginPath();g.moveTo(x,top);g.lineTo(x,top+dh);g.stroke();g.restore();}
       if(a.prof){const T=profileLineOnSlide(s,a.prof);g.save();g.strokeStyle="#4A90D9";g.lineWidth=2;g.beginPath();g.moveTo(T.x*k,T.y1*k);g.lineTo(T.x*k,T.y2*k);g.stroke();g.restore();}
       if(a.stick){const T=stickOnSlide(s,a.stick);g.save();g.strokeStyle="#4A90D9";g.lineWidth=2;g.beginPath();g.moveTo(T.x1*k,T.y1*k);g.lineTo(T.x2*k,T.y2*k);g.stroke();
         // eye line through both pupils, exactly as it is written into the slide
@@ -4952,12 +5008,21 @@ async function measureOuterMid(canvas){
   if(!det)return null;const P=det.landmarks.positions;
   return (P[36].x+P[45].x)/2/canvas.width;
 }
+/* the template's own straight lines of one direction ("v": vertical, "h": horizontal), except the named ones */
+function removeTemplateLines(doc,dir,keep){
+  for(const el of [...doc.getElementsByTagNameNS(NS.p,"cxnSp")]){
+    const nv=el.getElementsByTagNameNS(NS.p,"cNvPr")[0],nm=nv?nv.getAttribute("name")||"":"";if(keep&&keep.has(nm))continue;
+    const xf=el.getElementsByTagNameNS(NS.a,"xfrm")[0];if(!xf)continue;const e=[...xf.children].find(c=>c.localName==="ext");if(!e)continue;
+    const cx=+e.getAttribute("cx"),cy=+e.getAttribute("cy"),r=Math.round((+xf.getAttribute("rot")||0)/5400000)%2;
+    const vert=r?cx>cy:cy>cx;if(dir==="v"?(vert&&Math.max(cx,cy)>5e5):(!vert&&Math.max(cx,cy)>5e5))el.parentNode.removeChild(el);}
+}
 function addFaceMidlines(doc,list){
   removeAutoLines(doc,new Set(["Face midline"]));
   if(!$("fitLines").checked)return;
+  if(list.some(s=>isMidSlot(s)&&assign[s.id]&&assign[s.id].photoId&&assign[s.id].fmid!=null))removeTemplateLines(doc,"v");
   for(const s of list){const a=assign[s.id];if(!isMidSlot(s)||!a||!a.photoId||a.fmid==null)continue;
     const f=frameRect(s),x=f.left+a.fmid*f.w;
-    const el=newLine(doc,"Face midline",19050,"E02020"),xf=el.getElementsByTagNameNS(NS.a,"xfrm")[0];
+    const el=newLine(doc,"Face midline",19050,"4A90D9"),xf=el.getElementsByTagNameNS(NS.a,"xfrm")[0];
     xf.getElementsByTagNameNS(NS.a,"off")[0].setAttribute("x",String(Math.round(x)));xf.getElementsByTagNameNS(NS.a,"off")[0].setAttribute("y",String(Math.round(f.top)));
     xf.getElementsByTagNameNS(NS.a,"ext")[0].setAttribute("cy",String(Math.round(f.h)));}
 }
@@ -5533,9 +5598,11 @@ $("genBtn").onclick=async()=>{try{syncName();}catch(_){}
         }else if(s.video&&!p)skippedVideo++;
       }
       if($("fitLines").checked){
-        const items=list.filter(s=>PROFILE_CATS.has(s.cat)&&s.k!==10&&assign[s.id]&&assign[s.id].prof).map(s=>profileLineOnSlide(s,assign[s.id].prof));
+        const items=list.filter(s=>isProfLineSlot(s)&&assign[s.id]&&assign[s.id].photoId&&assign[s.id].prof).map(s=>profileLineOnSlide(s,assign[s.id].prof));
         if(items.length)fitProfileLines(doc,items);
-        addProfileGuides(doc,list);
+        // slides 6 and 7: the horizontal guide lines are for the program only - not in the file
+        if(list.some(s=>s.k===6||s.k===7)){removeAutoLines(doc,new Set(["Head top line","Eye line","Chin line","Ear top line","Ear bottom line"]));removeTemplateLines(doc,"h");}
+        else addProfileGuides(doc,list);
       }
       if($("fitLines").checked)fitEyeGuideLine(doc,list);
       fitIntraoralMidline(doc,list);
@@ -5551,7 +5618,7 @@ $("genBtn").onclick=async()=>{try{syncName();}catch(_){}
     }
     for(const b of fullCache.values())b.close&&b.close();
     zip.file("[Content_Types].xml",ser(ctDoc));
-    status("جارٍ كتابة بيانات المريض…");await piFill(zip);
+    status("جارٍ كتابة بيانات المريض…");await piFill(zip);await oaFill(zip);
 
     if(dropPaths.size){status(`جارٍ حذف ${arNum(dropPaths.size)} شريحة فارغة…`);await dropSlides(zip,dropPaths);}
     status("جارٍ حذف صور المريض السابق غير المستخدمة…");setBar("genBar",.85);
