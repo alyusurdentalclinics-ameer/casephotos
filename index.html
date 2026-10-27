@@ -5617,7 +5617,7 @@ $("genBtn").onclick=async()=>{try{syncName();}catch(_){}
         const items=list.filter(s=>isProfLineSlot(s)&&assign[s.id]&&assign[s.id].photoId&&assign[s.id].prof).map(s=>profileLineOnSlide(s,assign[s.id].prof));
         if(items.length)fitProfileLines(doc,items);
         // slides 6 and 7: the horizontal guide lines are for the program only - not in the file
-        if(list.some(s=>s.k===6||s.k===7)){removeAutoLines(doc,new Set(["Head top line","Eye line","Chin line","Ear top line","Ear bottom line"]));removeTemplateLines(doc,"h");}
+        if(list.some(s=>s.k===6||s.k===7||s.k===8)){removeAutoLines(doc,new Set(["Head top line","Eye line","Chin line","Ear top line","Ear bottom line"]));removeTemplateLines(doc,"h");}
         if(list.some(s=>s.k===7))removeTemplateLines(doc,"v");   // slide 7: no vertical line either
         else addProfileGuides(doc,list);
       }
