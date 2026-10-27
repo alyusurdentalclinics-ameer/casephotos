@@ -1478,6 +1478,15 @@ async function oaFill(zip){
     if(n)zip.file(path,ser(doc));
   }
 }
+/* PowerPoint file only (the program is not touched): every "Profile View" slide loses its horizontal lines */
+async function dropProfileHLines(zip){
+  for(const path of await piSlides(zip)){
+    const x=await zip.file(path).async("string");if(!/Profile\s*View/i.test(x))continue;
+    const doc=parseXml(x),n0=doc.getElementsByTagNameNS(NS.p,"cxnSp").length;
+    removeAutoLines(doc,new Set(["Head top line","Eye line","Chin line","Ear top line","Ear bottom line"]));removeTemplateLines(doc,"h");
+    if(doc.getElementsByTagNameNS(NS.p,"cxnSp").length!==n0)zip.file(path,ser(doc));
+  }
+}
 /* on generate: the values typed in the program go into the slide */
 async function piFill(zip){
   const val=id=>{const e=$(id);let v=e?e.value.trim():"";if(id==="piName"&&!v)v=($("outName").value||"").trim();if(id==="piDate"&&!v)v=piTodayStr();return v;};
@@ -4624,7 +4633,6 @@ function fitEyeGuideLine(doc,list){
 /* Two horizontal guide lines across a profile slide: top of the head and middle of the eye. */
 function addProfileGuides(doc,list){
   removeAutoLines(doc,new Set(["Head top line","Eye line","Chin line","Ear top line","Ear bottom line"]));
-  if([...doc.getElementsByTagNameNS(NS.a,"t")].some(t=>/Profile\s*View/i.test(t.textContent)))return;   // profile slides: no horizontal lines in the file
   const withA=list.filter(s=>!isMA(s)&&assign[s.id]&&assign[s.id].align&&assign[s.id].align.mode==="prof");
   if(!withA.length)return;
   const s0=withA[0],A=assign[s0.id].align,f=frameRect(s0);
@@ -5618,8 +5626,7 @@ $("genBtn").onclick=async()=>{try{syncName();}catch(_){}
         const items=list.filter(s=>isProfLineSlot(s)&&assign[s.id]&&assign[s.id].photoId&&assign[s.id].prof).map(s=>profileLineOnSlide(s,assign[s.id].prof));
         if(items.length)fitProfileLines(doc,items);
         // slides 6 and 7: the horizontal guide lines are for the program only - not in the file
-        const isProfView=[...doc.getElementsByTagNameNS(NS.a,"t")].some(t=>/Profile\s*View/i.test(t.textContent));   // any "Profile View" slide, whatever its number
-        if(isProfView||list.some(s=>s.k===6||s.k===7||s.k===8)){removeAutoLines(doc,new Set(["Head top line","Eye line","Chin line","Ear top line","Ear bottom line"]));removeTemplateLines(doc,"h");}
+        if(list.some(s=>s.k===6||s.k===7||s.k===8)){removeAutoLines(doc,new Set(["Head top line","Eye line","Chin line","Ear top line","Ear bottom line"]));removeTemplateLines(doc,"h");}
         if(list.some(s=>s.k===7))removeTemplateLines(doc,"v");   // slide 7: no vertical line either
         else addProfileGuides(doc,list);
       }
@@ -5638,6 +5645,7 @@ $("genBtn").onclick=async()=>{try{syncName();}catch(_){}
     for(const b of fullCache.values())b.close&&b.close();
     zip.file("[Content_Types].xml",ser(ctDoc));
     status("جارٍ كتابة بيانات المريض…");await piFill(zip);await oaFill(zip);
+    await dropProfileHLines(zip);
 
     if(dropPaths.size){status(`جارٍ حذف ${arNum(dropPaths.size)} شريحة فارغة…`);await dropSlides(zip,dropPaths);}
     status("جارٍ حذف صور المريض السابق غير المستخدمة…");setBar("genBar",.85);
