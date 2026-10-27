@@ -323,6 +323,7 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(200px,34
 .arch-g{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))!important}
 .arch-col{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--surface2)}
 .arch-col>b{font-size:14px;color:#0B1D4A}
+.arch-box{margin:4px 14px 14px;padding:12px;border:1px dashed var(--line);border-radius:14px;background:var(--surface)}
 </style>
 
 <script src="face-api.js"></script>
@@ -442,16 +443,6 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(200px,34
       <label class="wide">الشكوى الرئيسية بكلام المريض <small>Chief Complaint</small><input type="text" id="piCC"></label>
       <label>تاريخ الإنشاء <small>Date of creation</small><input type="text" id="piDate" placeholder="يوم-شهر-سنة"></label>
     </div>
-    <div class="pinfo-h" style="margin-top:14px"><h2>🦷 الفكّان <small>(تُكتب بشريحة «Occlusal Intraoral» — Upper arch / Lower arch)</small></h2></div>
-    <div class="pinfo-g arch-g">
-      <div class="arch-col"><b>Upper arch — الفك العلوي</b>
-        <label>الأسنان المفقودة <small>Missing teeth</small><input type="text" id="oaUM" value="NO"></label>
-        <label>الدوران <small>Rotation</small><input type="text" id="oaUR" value="NO"></label>
-        <label>التزاحم <small>Crowding</small><input type="text" id="oaUC" value="NO"></label></div>
-      <div class="arch-col"><b>Lower arch — الفك السفلي</b>
-        <label>الأسنان المفقودة <small>Missing teeth</small><input type="text" id="oaLM" value="NO"></label>
-        <label>الدوران <small>Rotation</small><input type="text" id="oaLR" value="NO"></label>
-        <label>التزاحم <small>Crowding</small><input type="text" id="oaLC" value="NO"></label></div>
     </div>
   </section>
 
@@ -515,6 +506,18 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(200px,34
     <div class="gate-msg" id="gateMsg" role="status">⏳ جارٍ التحقق…</div>
   </div>
 </div>
+<div id="archHold" hidden><div class="arch-box" id="archBox">
+    <div class="pinfo-h"><h2>✍️ معلومات الفكّين <small>(إدخال يدوي — تُكتب بهذه الشريحة)</small></h2></div>
+    <div class="pinfo-g arch-g">
+      <div class="arch-col"><b>Upper arch — الفك العلوي</b>
+        <label>الأسنان المفقودة <small>Missing teeth</small><input type="text" id="oaUM" value="NO"></label>
+        <label>الدوران <small>Rotation</small><input type="text" id="oaUR" value="NO"></label>
+        <label>التزاحم <small>Crowding</small><input type="text" id="oaUC" value="NO"></label></div>
+      <div class="arch-col"><b>Lower arch — الفك السفلي</b>
+        <label>الأسنان المفقودة <small>Missing teeth</small><input type="text" id="oaLM" value="NO"></label>
+        <label>الدوران <small>Rotation</small><input type="text" id="oaLR" value="NO"></label>
+        <label>التزاحم <small>Crowding</small><input type="text" id="oaLC" value="NO"></label></div>
+</div></div>
 <div class="toast" id="toast" hidden></div>
 
 <script>
@@ -2476,7 +2479,7 @@ const isMA=s=>!!s&&(MA_CATS.has(s.cat)||s.k===10);   // slide 10 (Mandibular Adv
 const PROFILE_CATS=new Set(["profile_right_rest","profile_right_smile","profile_left_rest","profile_left_smile"]);
 const THREEQ_CATS=new Set(["threeq_rest","threeq_smile","threeq_left_rest","threeq_left_smile"]);
 /* the slots that get a vertical profile line: profile photos and three-quarter photos (not jaw advancement) */
-const isProfLineSlot=s=>!!s&&!s.video&&s.k!==10&&s.k!==15&&(PROFILE_CATS.has(s.cat)||THREEQ_CATS.has(s.cat));
+const isProfLineSlot=s=>!!s&&!s.video&&s.k!==10&&s.k!==15&&s.k!==7&&s.k!==9&&PROFILE_CATS.has(s.cat);
 const FACE_CATS=new Set([...FRONTAL_CATS,"profile_right_rest","profile_right_smile","profile_left_rest","profile_left_smile","threeq_rest","threeq_smile","threeq_left_rest","threeq_left_smile","ma_profile","ma_threeq"]);
 let faceInit=null;
 function initFace(){
@@ -3731,7 +3734,8 @@ async function openZoomView(s,pic,title){
   const VA=!pic&&assign[s.id]||null;
   const VL=!VA?null:HA&&HA.lines.mid!=null?{k:"mid",x:HA.lines.mid,c:"#E02020"}
     :isMidSlot(s)&&VA.fmid!=null?{k:"fmid",x:VA.fmid,c:"#4A90D9"}
-    :isProfLineSlot(s)&&VA.prof?{k:"prof",x:VA.prof.x,y1:VA.prof.y1,y2:VA.prof.y2,c:"#4A90D9"}:null;
+    :isProfLineSlot(s)&&VA.prof?{k:"prof",x:VA.prof.x,y1:VA.prof.y1,y2:VA.prof.y2,c:"#4A90D9"}
+    :isIoMidSlot(s)?{k:"io",x:ioMidX(s),c:"#4A90D9"}:null;
   const VX0=VL?VL.x:null;
   const hRes=()=>{if(!LL)return "";const m=LL.nose-LL.brow,lo=LL.chin-LL.nose;if(!(m>0))return "";const d=(lo-m)/m*100;
     return `حاجب→أنف ${(m/(LL.chin-LL.brow)*100).toFixed(1)}٪ · أنف→ذقن ${(lo/(LL.chin-LL.brow)*100).toFixed(1)}٪ · الفرق ${d>=0?"+":""}${d.toFixed(1)}٪ ${Math.abs(d)<3?"(متساويان تقريباً)":d>0?"(السفلي أطول)":"(السفلي أقصر)"}`;};
@@ -3791,6 +3795,7 @@ async function openZoomView(s,pic,title){
   const saveV=()=>{if(!VL||Math.abs(VL.x-VX0)<1e-6)return false;
     if(VL.k==="mid"){HA.lines=Object.assign({},HA.lines,{mid:VL.x});HA.linesMan=true;}
     else if(VL.k==="fmid"){VA.fmid=VL.x;VA.fmidMan=true;}
+    else if(VL.k==="io"){VA.ioMid=VL.x;}
     else{VA.prof=Object.assign({},VA.prof,{x:VL.x});VA.profMan=true;}
     return true;};
   const saveLines=()=>{if(!LL){if(saveV())renderSlides();return;}saveV();const ch=["brow","nose","chin"].some(k=>Math.abs(LL[k]-HA.lines[k])>1e-5);
@@ -4488,9 +4493,12 @@ function removeOccMasks(doc,list){
     if(ox>0&&oy>(B-T)*.3)sp.parentNode.removeChild(sp);     // a mask lying over the photos
   }
 }
+/* slide 12: where the facial midline crosses the intraoral photo (fraction of the frame width); a hand-set place wins */
+const isIoMidSlot=s=>!!s&&s.cat==="io_frontal"&&!s.video&&assign[s.id]&&assign[s.id].align&&assign[s.id].align.mode==="teeth";
+function ioMidX(s){const a=assign[s.id],A=a.align;return Math.max(0,Math.min(1,a.ioMid!=null?a.ioMid:A.midX!=null?A.midX:(A.tx||.5)));}
 function fitIntraoralMidline(doc,list){
   const s=list.find(t=>t.cat==="io_frontal"&&assign[t.id]&&assign[t.id].align&&assign[t.id].align.mode==="teeth");if(!s)return;
-  const f=frameRect(s),A=assign[s.id].align,cx=f.left+Math.max(0,Math.min(1,A.midX!=null?A.midX:(A.tx||.5)))*f.w;
+  const f=frameRect(s),cx=f.left+ioMidX(s)*f.w;
   for(const el of doc.getElementsByTagNameNS(NS.p,"cxnSp")){
     const sp=[...el.children].find(c=>c.localName==="spPr"),xf=sp&&[...sp.children].find(c=>c.localName==="xfrm");if(!xf)continue;
     const o=[...xf.children].find(c=>c.localName==="off"),e=[...xf.children].find(c=>c.localName==="ext");if(!o||!e)continue;
@@ -4970,6 +4978,7 @@ function drawSlidePreview(sec,list,bigW){
         g.beginPath();g.moveTo(bx+10,Y.nose*k);g.lineTo(bx+10,(2*Y.nose-Y.brow)*k);g.stroke();
         g.restore();
       }
+      if(isIoMidSlot(s)){const fr=frameRect(s),x=(fr.left+ioMidX(s)*fr.w)*k,ex=fr.h*.08*k;g.save();g.strokeStyle="#4A90D9";g.lineWidth=2;g.beginPath();g.moveTo(x,top-ex);g.lineTo(x,top+dh+ex);g.stroke();g.restore();}
       if(a.fmid!=null&&isMidSlot(s)){const fr=frameRect(s),x=(fr.left+a.fmid*fr.w)*k;g.save();g.strokeStyle="#4A90D9";g.lineWidth=1.5;g.beginPath();g.moveTo(x,top);g.lineTo(x,top+dh);g.stroke();g.restore();}
       if(a.prof){const T=profileLineOnSlide(s,a.prof);g.save();g.strokeStyle="#4A90D9";g.lineWidth=2;g.beginPath();g.moveTo(T.x*k,T.y1*k);g.lineTo(T.x*k,T.y2*k);g.stroke();g.restore();}
       if(a.stick){const T=stickOnSlide(s,a.stick);g.save();g.strokeStyle="#4A90D9";g.lineWidth=2;g.beginPath();g.moveTo(T.x1*k,T.y1*k);g.lineTo(T.x2*k,T.y2*k);g.stroke();
@@ -5293,7 +5302,7 @@ function renderSlides(){
   }
 }
 function renderSlidesInner(){
-  const host=$("slides");host.innerHTML="";
+  const host=$("slides");{const ab=$("archBox");if(ab)$("archHold").appendChild(ab);}host.innerHTML="";
   const bySlide=new Map();for(const s of slots){if(!bySlide.has(s.n))bySlide.set(s.n,[]);bySlide.get(s.n).push(s);}
   for(const [n,list] of bySlide){
     const t=SLIDE_TITLES[n]||[`Slide ${n}`,""];
@@ -5416,7 +5425,7 @@ function renderSlidesInner(){
         // first manual change: freeze the automatic fit of this photo (rotate / flip / reset hand it back to the automatic fit)
         if(act==="rot"||act==="flip"||act==="reset"||act==="vflip")a2.frozen=null;
         else if(!a2.frozen&&a2.align)a2.frozen={align:JSON.parse(JSON.stringify(a2.align)),dx:a2.dx||0,dy:a2.dy||0,zoom:a2.zoom||1};
-        a2.lines=null;a2.linesMan=false;a2.stick=undefined;a2.prof=undefined;
+        a2.lines=null;a2.linesMan=false;a2.stick=undefined;a2.prof=undefined;a2.ioMid=undefined;
         if(act==="rot")a2.rot=((a2.rot||0)+90)%360;
         else if(act==="flip")a2.flip=!a2.flip;
         else if(act==="vflip"){a2.rot=((a2.rot||0)+180)%360;a2.flip=!a2.flip;a2.occDone=a2.photoId;}
@@ -5437,6 +5446,7 @@ function renderSlidesInner(){
     drawSlidePreview(sec,list);
     if(list.some(isOccSlot)){sec.insertBefore(chartPanel(),sec.querySelector(".slots"));const dp=diagPanel();if(dp)sec.insertBefore(dp,sec.querySelector(".slots"));}
     if(list.some(isOccSlot)){const o=occOverall();if(o){const d=document.createElement("div");d.className="aligned";d.style.cssText="direction:ltr;text-align:left;font-weight:700;margin:6px 4px";d.textContent="Molar relationship: "+o;sec.insertBefore(d,sec.querySelector(".slots"));}}
+    if(list.some(t=>t.k===14)){const ab=$("archBox");if(ab)sec.appendChild(ab);}   // slide 14: the hand-typed arch information
     host.appendChild(sec);
   }
 }
@@ -5602,6 +5612,7 @@ $("genBtn").onclick=async()=>{try{syncName();}catch(_){}
         if(items.length)fitProfileLines(doc,items);
         // slides 6 and 7: the horizontal guide lines are for the program only - not in the file
         if(list.some(s=>s.k===6||s.k===7)){removeAutoLines(doc,new Set(["Head top line","Eye line","Chin line","Ear top line","Ear bottom line"]));removeTemplateLines(doc,"h");}
+        if(list.some(s=>s.k===7))removeTemplateLines(doc,"v");   // slide 7: no vertical line either
         else addProfileGuides(doc,list);
       }
       if($("fitLines").checked)fitEyeGuideLine(doc,list);
