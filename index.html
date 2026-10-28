@@ -4261,8 +4261,13 @@ function drawCeph(g,F,opt){
   arc(inter("U1A","U1","PNS","ANS"),dir("ANS","PNS"),dir("U1A","U1"),sz*.14,`${Math.round(R.U1PP)}°`);
   arc(inter("L1A","L1","Go","Me"),dir("Me","Go"),dir("L1A","L1"),sz*.16,`${Math.round(R.IMPA)}°`);
   // MMPA: the planes meet behind the head - shown at Go with a line parallel to the palatal plane
-  {const G=F.Go,pp=dir("PNS","ANS"),L=Math.hypot(...pp)||1;g.strokeStyle="#50FF50";g.lineWidth=1.5*k;g.setLineDash([6*k,4*k]);g.beginPath();g.moveTo(G[0],G[1]);g.lineTo(G[0]+pp[0]/L*sz*.45,G[1]+pp[1]/L*sz*.45);g.stroke();g.setLineDash([]);
-   arc(G,pp,dir("Go","Me"),sz*.3,`${Math.round(R.MMPA)}°`);}
+  // MMPA: one arc around the point where the palatal and mandibular planes meet (behind the head), running from PNS on
+  // the palatal line down to the mandibular line (as on a hand tracing); both lines are carried back to the arc
+  {const V=inter("PNS","ANS","Go","Me");
+   if(V&&Math.hypot(V[0]-F.PNS[0],V[1]-F.PNS[1])>1){const rr=Math.hypot(V[0]-F.PNS[0],V[1]-F.PNS[1]),mp=dir("Go","Me"),L=Math.hypot(...mp)||1,E=[V[0]+mp[0]/L*rr,V[1]+mp[1]/L*rr];
+     g.strokeStyle="#FF50C8";g.lineWidth=2*k;g.beginPath();g.moveTo(F.Go[0],F.Go[1]);g.lineTo(E[0],E[1]);g.stroke();
+     arc(V,[F.ANS[0]-V[0],F.ANS[1]-V[1]],mp,rr/k,`${Math.round(R.MMPA)}°`);}
+   else{const G=F.Go,pp=dir("PNS","ANS");arc(G,pp,dir("Go","Me"),sz*.3,`${Math.round(R.MMPA)}°`);}}
   if(opt.handles!==false)for(const key of CEPH_KEYS){const q=F[key],r=(opt.r||6)*k;g.beginPath();g.arc(q[0],q[1],r,0,2*Math.PI);g.fillStyle=opt.sel===key?"rgba(255,216,0,.9)":"rgba(255,40,40,.85)";g.fill();g.lineWidth=1.5*k;g.strokeStyle="#fff";g.stroke();
     if(opt.labels!==false){g.font=`bold ${Math.round(fs*.85)}px sans-serif`;g.textAlign="left";g.textBaseline="bottom";g.lineWidth=3*k;g.strokeStyle="rgba(0,0,0,.7)";const t=CEPH_NAME[key]||key;g.strokeText(t,q[0]+r+3,q[1]-r);g.fillStyle="#FFE600";g.fillText(t,q[0]+r+3,q[1]-r);}}
   g.restore();return R;
