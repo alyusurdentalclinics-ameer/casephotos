@@ -4250,7 +4250,7 @@ function drawCeph(g,F,opt){
   line("PNS","ANS","#50FF50",-.3,1.1);line("Go","Me","#FF50C8",-.3,1.08);line("U1A","U1","#FFFFFF",-.15,1.05);line("L1A","L1","#AAAAFF",-.15,1.08);
   const inter=(a,b,c,d)=>{const [x1,y1]=F[a],[x2,y2]=F[b],[x3,y3]=F[c],[x4,y4]=F[d];const den=(x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);if(Math.abs(den)<1e-9)return null;const t=((x1-x3)*(y3-y4)-(y1-y3)*(x3-x4))/den;return [x1+t*(x2-x1),y1+t*(y2-y1)];};
   const dir=(a,b)=>[F[b][0]-F[a][0],F[b][1]-F[a][1]];
-  const fs=Math.round((opt.fs||14)*k);
+  const fs=Math.max(8,Math.round((opt.fs||14)*k*.7));   // smaller writing on the picture
   const arc=(V,d1,d2,r,label)=>{if(!V)return;let a1=Math.atan2(d1[1],d1[0]),a2=Math.atan2(d2[1],d2[0]);let da=((a2-a1)%(2*Math.PI)+2*Math.PI)%(2*Math.PI);if(da>Math.PI){[a1,a2]=[a2,a1];da=2*Math.PI-da;}
     r*=k;g.strokeStyle="#FFE600";g.lineWidth=2.5*k;g.beginPath();g.arc(V[0],V[1],r,a1,a1+da);g.stroke();
     const m=a1+da/2;g.font=`bold ${fs}px sans-serif`;g.textAlign="center";g.textBaseline="middle";g.direction="ltr";g.lineWidth=3*k;g.strokeStyle="rgba(0,0,0,.75)";
