@@ -4208,6 +4208,123 @@ async function openOJZoom(s){
     else close(v==="ok");});
   draw();
 }
+/* ---------- Slide 17: lateral cephalometric tracing ----------
+   12 landmarks kept in fractions of the ORIGINAL photo (turning / zooming never moves them):
+   S Sella · N Nasion · A Subspinale · B Supramentale · ANS / PNS (palatal plane) · Go / Me (mandibular plane)
+   U1 / U1A tip and root apex of the upper incisor · L1 / L1A of the lower incisor.
+   Angles (Steiner / Eastman): SNA, SNB, ANB, MMPA (PP–MP), UI/Mx (U1–PP), LI/Mn (IMPA), also SN–MP, U1–SN, U1/L1. */
+const CEPH_KEYS=["S","N","A","B","ANS","PNS","Go","Me","U1","U1A","L1","L1A"];
+const CEPH_DEF={S:[.312,.377],N:[.657,.304],A:[.677,.575],B:[.649,.767],ANS:[.698,.529],PNS:[.449,.542],Go:[.368,.767],Me:[.590,.890],U1:[.713,.710],U1A:[.657,.582],L1:[.688,.688],L1A:[.618,.811]};
+const CEPH_NAME={U1:"U1 tip",U1A:"U1 apex",L1:"L1 tip",L1A:"L1 apex"};
+const isCephSlot=s=>!!s&&s.k===17&&!s.video;
+function cephPtsFrame(p,a,map){const C=p&&p.ceph;if(!C||!C.pts||!map)return null;const r={};for(const k of CEPH_KEYS){const q=C.pts[k];if(!q)return null;const t=rawToTurned(p,a.rot,a.flip,q[0],q[1]);r[k]=map(t[0],t[1]);}return r;}
+/* the angles from points in any pixel space (x right, y down) */
+function cephAngles(F){
+  const v=(a,b)=>[F[b][0]-F[a][0],F[b][1]-F[a][1]];
+  const ang=(u,w)=>{const c=(u[0]*w[0]+u[1]*w[1])/(Math.hypot(...u)*Math.hypot(...w)||1);return Math.acos(Math.max(-1,Math.min(1,c)))*180/Math.PI;};
+  const ln=(u,w)=>{const x=ang(u,w);return Math.min(x,180-x);};
+  const SNA=ang(v("N","S"),v("N","A")),SNB=ang(v("N","S"),v("N","B"));
+  return {SNA,SNB,ANB:SNA-SNB,MMPA:ln(v("PNS","ANS"),v("Go","Me")),SNMP:ln(v("S","N"),v("Go","Me")),
+    U1PP:ang(v("U1A","U1"),v("ANS","PNS")),U1SN:ang(v("U1A","U1"),v("N","S")),IMPA:ang(v("L1A","L1"),v("Me","Go")),II:ang(v("U1","U1A"),v("L1","L1A"))};
+}
+const CEPH_NORM={SNA:"81 ± 3",SNB:"78 ± 3",ANB:"3 ± 2",MMPA:"27 ± 3",U1PP:"109 ± 6",IMPA:"93 ± 6"};
+function cephSummary(R){if(!R)return "";const f=x=>Math.round(x);
+  return `SNA ${f(R.SNA)}° · SNB ${f(R.SNB)}° · ANB ${f(R.ANB)}° · MMPA ${f(R.MMPA)}° · UI/Mx ${f(R.U1PP)}° · LI/Mn ${f(R.IMPA)}° · U1/L1 ${f(R.II)}°`;}
+/* the tracing: lines, the angle arcs with their values, the points */
+function drawCeph(g,F,opt){
+  opt=opt||{};const k=opt.k||1,R=cephAngles(F);g.save();g.lineCap="round";
+  const line=(a,b,col,t0,t1,w)=>{const A=F[a],B=F[b];g.strokeStyle=col;g.lineWidth=(w||2)*k;g.beginPath();g.moveTo(A[0]+(B[0]-A[0])*t0,A[1]+(B[1]-A[1])*t0);g.lineTo(A[0]+(B[0]-A[0])*t1,A[1]+(B[1]-A[1])*t1);g.stroke();};
+  line("S","N","#FFD700",-.1,1.1);line("N","A","#20D0F0",0,1.15);line("N","B","#FF8C00",0,1.08);
+  line("PNS","ANS","#50FF50",-.3,1.1);line("Go","Me","#FF50C8",-.3,1.08);line("U1A","U1","#FFFFFF",-.15,1.05);line("L1A","L1","#AAAAFF",-.15,1.08);
+  const inter=(a,b,c,d)=>{const [x1,y1]=F[a],[x2,y2]=F[b],[x3,y3]=F[c],[x4,y4]=F[d];const den=(x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);if(Math.abs(den)<1e-9)return null;const t=((x1-x3)*(y3-y4)-(y1-y3)*(x3-x4))/den;return [x1+t*(x2-x1),y1+t*(y2-y1)];};
+  const dir=(a,b)=>[F[b][0]-F[a][0],F[b][1]-F[a][1]];
+  const fs=Math.round((opt.fs||14)*k);
+  const arc=(V,d1,d2,r,label)=>{if(!V)return;let a1=Math.atan2(d1[1],d1[0]),a2=Math.atan2(d2[1],d2[0]);let da=((a2-a1)%(2*Math.PI)+2*Math.PI)%(2*Math.PI);if(da>Math.PI){[a1,a2]=[a2,a1];da=2*Math.PI-da;}
+    r*=k;g.strokeStyle="#FFE600";g.lineWidth=2.5*k;g.beginPath();g.arc(V[0],V[1],r,a1,a1+da);g.stroke();
+    const m=a1+da/2;g.font=`bold ${fs}px sans-serif`;g.textAlign="center";g.textBaseline="middle";g.direction="ltr";g.lineWidth=3*k;g.strokeStyle="rgba(0,0,0,.75)";
+    const tx=V[0]+(r+fs*1.2)*Math.cos(m),ty=V[1]+(r+fs*1.2)*Math.sin(m);g.strokeText(label,tx,ty);g.fillStyle="#FF4040";g.fillText(label,tx,ty);};
+  const sz=Math.hypot(...dir("S","N"));
+  arc(F.N,dir("N","S"),dir("N","A"),sz*.28,`${Math.round(R.SNA)}°`);
+  arc(F.N,dir("N","S"),dir("N","B"),sz*.48,`${Math.round(R.SNB)}°`);
+  arc(inter("U1A","U1","PNS","ANS"),dir("ANS","PNS"),dir("U1A","U1"),sz*.14,`${Math.round(R.U1PP)}°`);
+  arc(inter("L1A","L1","Go","Me"),dir("Me","Go"),dir("L1A","L1"),sz*.16,`${Math.round(R.IMPA)}°`);
+  // MMPA: the planes meet behind the head - shown at Go with a line parallel to the palatal plane
+  {const G=F.Go,pp=dir("PNS","ANS"),L=Math.hypot(...pp)||1;g.strokeStyle="#50FF50";g.lineWidth=1.5*k;g.setLineDash([6*k,4*k]);g.beginPath();g.moveTo(G[0],G[1]);g.lineTo(G[0]+pp[0]/L*sz*.45,G[1]+pp[1]/L*sz*.45);g.stroke();g.setLineDash([]);
+   arc(G,pp,dir("Go","Me"),sz*.3,`${Math.round(R.MMPA)}°`);}
+  if(opt.handles!==false)for(const key of CEPH_KEYS){const q=F[key],r=(opt.r||6)*k;g.beginPath();g.arc(q[0],q[1],r,0,2*Math.PI);g.fillStyle=opt.sel===key?"rgba(255,216,0,.9)":"rgba(255,40,40,.85)";g.fill();g.lineWidth=1.5*k;g.strokeStyle="#fff";g.stroke();
+    if(opt.labels!==false){g.font=`bold ${Math.round(fs*.85)}px sans-serif`;g.textAlign="left";g.textBaseline="bottom";g.lineWidth=3*k;g.strokeStyle="rgba(0,0,0,.7)";const t=CEPH_NAME[key]||key;g.strokeText(t,q[0]+r+3,q[1]-r);g.fillStyle="#FFE600";g.fillText(t,q[0]+r+3,q[1]-r);}}
+  g.restore();return R;
+}
+function cephEnsure(p,a){if(p.ceph&&p.ceph.pts)return;const T=(u,v)=>turnedToRaw(p,a.rot,a.flip,u,v);const pts={};for(const k of CEPH_KEYS)pts[k]=T(...CEPH_DEF[k]);p.ceph={pts,man:false};}
+async function openCephZoom(s){
+  const a=assign[s.id],p=a&&photos.find(x=>x.id===a.photoId);if(!a||!p)return;cephEnsure(p,a);
+  const fr=frameRect(s),ar=fr.w/fr.h,BW=3000,BH=Math.round(BW/ar);
+  let full=null;try{full=await createImageBitmap(p.file,{imageOrientation:"from-image"});}catch(_){}
+  const big=renderDisplayed(wbSrc(p,s,a,full||p.prev),{rot:a.rot,flip:a.flip,align:effAlign(a),bg:wbBg(p,s,a),zoom:a.zoom,tilt:a.tilt,level:a.eyeLevel,dx:a.dx,dy:a.dy,nudged:!!(a.dx||a.dy||(a.zoom&&a.zoom!==1))},BW,BH);
+  if(full&&full.close)full.close();
+  const map=big._map,inv=invMap(map),keep=JSON.parse(JSON.stringify(p.ceph));
+  const S={};{const F=cephPtsFrame(p,a,map);for(const k of CEPH_KEYS)S[k]=F[k].slice();}
+  const ov=document.createElement("div");
+  ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;overflow:hidden;box-sizing:border-box;max-width:100%;max-height:100%;font-family:Tajawal,Tahoma,sans-serif";
+  ov.innerHTML=`<button class="btn sm" data-z="ok" type="button" title="إغلاق (يحفظ التعديلات)" style="position:absolute;top:10px;left:10px;z-index:3;font-size:20px;line-height:1;padding:6px 12px;background:#C00000;color:#fff;border-radius:50%">✕</button><div style="display:flex;gap:6px 8px;align-items:center;padding:8px 12px 8px 64px;color:#fff;flex-wrap:wrap;background:#0a1014;flex:none">
+    <b style="font-size:18px">تحليل السيفالومتري (Lateral ceph)</b><span class="res" style="background:#fff;color:#000;font-weight:700;padding:3px 10px;border-radius:6px;direction:ltr"></span>
+    <span style="opacity:.85;font-size:13px;flex:1 1 260px;min-width:0">اسحب أي نقطة لمكانها · Tab ينقل بين النقاط · الأسهم تحرك النقطة المختارة (Shift أسرع)</span>
+    <button class="btn sm" data-z="def" type="button" title="يرجع النقاط لمكانها الابتدائي">↺ النقاط الابتدائية</button>
+    <button class="btn sm" data-z="in">＋ تكبير</button><button class="btn sm" data-z="out">－ تصغير</button>
+    <button class="btn sm" data-z="ok" style="background:#1f8f4e;color:#fff">✓ اعتماد</button><button class="btn sm" data-z="no">إلغاء</button></div>
+    <canvas style="flex:1 1 0;width:100%;min-height:0;min-width:0;max-width:100%;display:block;cursor:grab;touch-action:none"></canvas>`;
+  zoomHeaderLayout(ov);document.body.appendChild(ov);
+  const cv=ov.querySelector("canvas"),g=cv.getContext("2d");
+  let vw=0,vh=0,z=1,cx=BW/2,cy=BH/2,sel="S";
+  const fit=()=>{const r=cv.getBoundingClientRect();vw=cv.width=Math.max(50,Math.round(r.width));vh=cv.height=Math.max(50,Math.round(r.height));};
+  fit();z=Math.min(vw/BW,vh/BH);
+  const zmin=()=>Math.min(vw/BW,vh/BH);
+  const toScr=(fx,fy)=>[(fx*BW-cx)*z+vw/2,(fy*BH-cy)*z+vh/2],toFr=(sx,sy)=>[((sx-vw/2)/z+cx)/BW,((sy-vh/2)/z+cy)/BH];
+  const writeBack=()=>{for(const k of CEPH_KEYS){const t=inv(S[k][0],S[k][1]);p.ceph.pts[k]=turnedToRaw(p,a.rot,a.flip,t[0],t[1]);}};
+  const draw=()=>{g.fillStyle="#0a1014";g.fillRect(0,0,vw,vh);g.imageSmoothingQuality="high";const sw=vw/z,sh=vh/z;g.drawImage(big,cx-sw/2,cy-sh/2,sw,sh,0,0,vw,vh);
+    const F={};for(const k of CEPH_KEYS)F[k]=toScr(S[k][0],S[k][1]);
+    // angles in the picture's own proportions (screen space keeps them: the same zoom on x and y)
+    const R=drawCeph(g,F,{k:1,fs:15,r:8,sel});ov.querySelector(".res").textContent=cephSummary(R);};
+  const zoomAt=(f,mx,my)=>{const bx=(mx-vw/2)/z+cx,by=(my-vh/2)/z+cy;z=Math.max(zmin(),Math.min(14,z*f));cx=bx-(mx-vw/2)/z;cy=by-(my-vh/2)/z;draw();};
+  let drag=null,last=null;
+  cv.addEventListener("pointerdown",e=>{const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+    let best=null,bd=1e9;for(const k of CEPH_KEYS){const q=toScr(S[k][0],S[k][1]),d=Math.hypot(mx-q[0],my-q[1]);if(d<bd){bd=d;best=k;}}
+    drag=bd<=22?best:"pan";if(drag!=="pan")sel=drag;last=[mx,my];cv.setPointerCapture(e.pointerId);cv.style.cursor=drag==="pan"?"grabbing":"crosshair";draw();});
+  cv.addEventListener("pointermove",e=>{if(!drag)return;const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+    if(drag==="pan"){cx-=(mx-last[0])/z;cy-=(my-last[1])/z;}else{const q=toFr(mx,my);S[drag]=[Math.max(0,Math.min(1,q[0])),Math.max(0,Math.min(1,q[1]))];}last=[mx,my];draw();});
+  const up=()=>{drag=null;cv.style.cursor="grab";};cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",up);
+  cv.addEventListener("wheel",e=>{e.preventDefault();const r=cv.getBoundingClientRect();zoomAt(e.deltaY<0?1.15:1/1.15,e.clientX-r.left,e.clientY-r.top);},{passive:false});
+  const key=e=>{if(e.key==="Escape"){close(false);return;}
+    if(e.key==="Tab"){e.preventDefault();sel=CEPH_KEYS[(CEPH_KEYS.indexOf(sel)+(e.shiftKey?CEPH_KEYS.length-1:1))%CEPH_KEYS.length];draw();return;}
+    if(e.key==="+"||e.key==="="){zoomAt(1.3,vw/2,vh/2);return;}if(e.key==="-"){zoomAt(1/1.3,vw/2,vh/2);return;}
+    const st={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];if(!st)return;e.preventDefault();
+    const k=e.shiftKey?6:1;S[sel]=[Math.max(0,Math.min(1,S[sel][0]+st[0]*k/BW*2)),Math.max(0,Math.min(1,S[sel][1]+st[1]*k/BH*2))];draw();};
+  document.addEventListener("keydown",key);
+  const onRs=()=>{fit();draw();};window.addEventListener("resize",onRs);
+  const close=ok=>{document.removeEventListener("keydown",key);window.removeEventListener("resize",onRs);ov.remove();
+    if(ok){writeBack();p.ceph.man=true;}else p.ceph=keep;renderSlides();};
+  ov.querySelectorAll("[data-z]").forEach(b=>b.onclick=()=>{const v=b.dataset.z;if(v==="in")zoomAt(1.3,vw/2,vh/2);else if(v==="out")zoomAt(1/1.3,vw/2,vh/2);
+    else if(v==="def"){for(const k of CEPH_KEYS){const raw=turnedToRaw(p,a.rot,a.flip,...CEPH_DEF[k]);const t=rawToTurned(p,a.rot,a.flip,raw[0],raw[1]);S[k]=map(t[0],t[1]);}draw();}
+    else close(v==="ok");});
+  draw();
+}
+/* PowerPoint slide 17: the "Patient's value" column of the angle table */
+async function cephFill(zip){
+  const s=slots.find(t=>isCephSlot(t)&&assign[t.id]&&assign[t.id].photoId);if(!s)return;
+  const a=assign[s.id],p=photos.find(x=>x.id===a.photoId);if(!p||!p.ceph||!p.ceph.pts)return;
+  const r=((a.rot||0)%360+360)%360,W=r%180?p.prev.height:p.prev.width,H=r%180?p.prev.width:p.prev.height,F={};
+  for(const k of CEPH_KEYS){const t=rawToTurned(p,a.rot,a.flip,p.ceph.pts[k][0],p.ceph.pts[k][1]);F[k]=[t[0]*W,t[1]*H];}
+  const R=cephAngles(F),val={SNA:R.SNA,SNB:R.SNB,ANB:R.ANB,MMPA:R.MMPA,"UI/MX":R.U1PP,"U1-PP":R.U1PP,"LI/MN":R.IMPA,IMPA:R.IMPA,"SN-MP":R.SNMP,"U1-SN":R.U1SN};
+  for(const path of await piSlides(zip)){
+    const x=await zip.file(path).async("string");if(!/Patient.{0,10}value/i.test(x))continue;
+    const doc=parseXml(x);let n=0;
+    for(const tr of doc.getElementsByTagNameNS(NS.a,"tr")){const tcs=[...tr.getElementsByTagNameNS(NS.a,"tc")];if(tcs.length<2)continue;
+      const name=[...tcs[0].getElementsByTagNameNS(NS.a,"t")].map(t=>t.textContent).join("").replace(/\s+/g,"").toUpperCase();
+      if(!(name in val))continue;const ts=[...tcs[1].getElementsByTagNameNS(NS.a,"t")];if(!ts.length)continue;
+      ts[0].textContent=String(Math.round(val[name]));for(const t of ts.slice(1))t.textContent="";n++;}
+    if(n)zip.file(path,ser(doc));
+  }
+}
 /* PowerPoint: "Overjet" / "Overbite" titles of slide 16 get the value; the measured distance is drawn in red */
 function addOJShapes(doc,s,p,map){
   const tag="OJOB|"+s.id;
@@ -4994,6 +5111,7 @@ function drawSlidePreview(sec,list,bigW){
         g.restore();fitted=true;}
       if(isOJSlot(s)&&img._map){const st=ojStatus(s);if(st.ok){const Fr=ojPtsFrame(p,a,img._map);if(Fr){const F={};for(const k of OJ_KEYS)F[k]=[left+Fr[k][0]*dw,top+Fr[k][1]*dh];drawOJ(g,F,ojKind(s),{lw:2,ruler:false,handles:false});}
         g.save();g.font="bold 16px sans-serif";g.textAlign="center";g.direction="ltr";g.textBaseline="top";g.fillStyle=st.g.k==="ok"?"#1E8C2E":st.g.k==="warn"?"#B8860B":"#C00000";g.fillText(st.g.t.replace(/^(Overjet|Overbite)\s*/,m=>m.trim()+": "),left+dw/2,top+dh+6);g.restore();}}
+      if(isCephSlot(s)&&p.ceph&&p.ceph.pts&&img._map){const Fr=cephPtsFrame(p,a,img._map);if(Fr){const F={};for(const kk of CEPH_KEYS)F[kk]=[left+Fr[kk][0]*dw,top+Fr[kk][1]*dh];drawCeph(g,F,{k:Math.max(.6,dw/700),fs:13,r:3,labels:false});}}
       if(isOccSlot(s)&&p.occl&&p.occl.pts&&!p.occl.hide&&img._map){const Fr=occPtsFrame(p,a,img._map);if(Fr){const F={};for(const kk of OCC_KEYS)F[kk]=[left+Fr[kk][0]*dw,top+Fr[kk][1]*dh];if(!p.occl.noLines)drawOcc(g,F,{lw:2,handles:false,off:occOff(p)});drawOccText(g,p,left+6,top+dh-44,14,a);}}
       if(a.align&&a.align.guide&&!fitted)hasGuide=true;
     }else{g.fillStyle="#E6ECF0";g.fillRect(left,top,dw,dh);}
@@ -5332,7 +5450,7 @@ function renderSlidesInner(){
       const el=document.createElement("div");el.className="slot"+(sar>1.2?" wide":"");el.dataset.sid=s.id;
       el.innerHTML=`<div class="pv" tabindex="0" role="button" aria-label="تغيير صورة ${esc(s.label)}" style="aspect-ratio:${sar.toFixed(4)}"><canvas></canvas>${p?"":`<div class="ph">${s.cat?"اضغط لاختيار صورة":"إطار غير معروف — اختر يدويًا"}</div>`}</div>
         <div class="slot-meta"><div class="slot-label">${esc(s.label)}${s.en?`<small>${esc(s.en)}</small>`:""}</div><span class="badge ${cls}">${txt}</span></div>${a&&a.align&&alignActive(a.align)?`<div class="aligned">✓ الوجه مطابق لخطوط القالب</div>`:""}
-        ${p&&!s.video?`<div class="tools"><button class="btn sm" data-act="rot" type="button" title="تدوير ٩٠ درجة">↻ تدوير</button><button class="btn sm" data-act="flip" type="button" title="قلب أفقي">⇋ قلب</button>${/^occ_/.test(s.cat)?`<button class="btn sm" data-act="vflip" type="button" title="قلب من فوق لتحت (الأسنان الأمامية للجهة الثانية)">⇅ قلب عمودي</button>`:""}${s.cat==="canting"&&a&&a.stick&&a.stick.x1!=null?`<button class="btn sm" data-act="stickzoom" type="button" title="فتح صورة الفم مكبّرة لضبط خط العود بدقة">🔍 تكبير الفم</button>`:""}${s.cat==="canting"&&a&&a.stickMan?`<button class="btn sm" data-act="stickauto" type="button" title="إرجاع خط العود للقياس التلقائي">↺ العود تلقائي</button>`:""}${s.cat==="canting"&&a&&a.stick&&a.stick.x1!=null?"":`<button class="btn sm" data-act="zoomv" type="button" title="${isOJSlot(s)?"تكبير الصورة مع نقاط القياس القابلة للسحب":isOccSlot(s)?"تكبير الصورة مع نقاط تحليل الإطباق القابلة للسحب":"فتح الصورة مكبّرة بشاشة كاملة"}">${isOJSlot(s)?"🔍 تكبير وقياس":isOccSlot(s)?"🔍 تكبير وتحليل":"🔍 تكبير"}</button>`}</div><div class="tools nudge"><button class="btn sm" data-act="zin" type="button" title="تكبير">＋</button><button class="btn sm" data-act="zout" type="button" title="تصغير">－</button><button class="btn sm" data-act="up" type="button" title="تحريك للأعلى">▲</button><button class="btn sm" data-act="down" type="button" title="تحريك للأسفل">▼</button><button class="btn sm" data-act="left" type="button" title="تحريك لليسار">◀</button><button class="btn sm" data-act="right" type="button" title="تحريك لليمين">▶</button><button class="btn sm" data-act="reset" type="button" title="إرجاع الوضع التلقائي (يلغي التكبير والتحريك والميلان)">↺ Reset</button></div>${true?`<div class="tools nudge"><button class="btn sm" data-act="tl5" type="button" title="تدوير ربع درجة عكس عقارب الساعة">↺0.25°</button><button class="btn sm" data-act="tl1" type="button" title="تدوير درجة عكس عقارب الساعة">↺1°</button><button class="btn sm" data-act="t0" type="button" title="إرجاع الميلان إلى صفر">${(Math.round((a&&a.tilt||0)*100)/100)}°</button><button class="btn sm" data-act="tr1" type="button" title="تدوير درجة مع عقارب الساعة">↻1°</button><button class="btn sm" data-act="tr5" type="button" title="تدوير ربع درجة مع عقارب الساعة">↻0.25°</button></div>`:""}`:""}`;
+        ${p&&!s.video?`<div class="tools"><button class="btn sm" data-act="rot" type="button" title="تدوير ٩٠ درجة">↻ تدوير</button><button class="btn sm" data-act="flip" type="button" title="قلب أفقي">⇋ قلب</button>${/^occ_/.test(s.cat)?`<button class="btn sm" data-act="vflip" type="button" title="قلب من فوق لتحت (الأسنان الأمامية للجهة الثانية)">⇅ قلب عمودي</button>`:""}${s.cat==="canting"&&a&&a.stick&&a.stick.x1!=null?`<button class="btn sm" data-act="stickzoom" type="button" title="فتح صورة الفم مكبّرة لضبط خط العود بدقة">🔍 تكبير الفم</button>`:""}${s.cat==="canting"&&a&&a.stickMan?`<button class="btn sm" data-act="stickauto" type="button" title="إرجاع خط العود للقياس التلقائي">↺ العود تلقائي</button>`:""}${s.cat==="canting"&&a&&a.stick&&a.stick.x1!=null?"":`<button class="btn sm" data-act="zoomv" type="button" title="${isOJSlot(s)?"تكبير الصورة مع نقاط القياس القابلة للسحب":isOccSlot(s)?"تكبير الصورة مع نقاط تحليل الإطباق القابلة للسحب":"فتح الصورة مكبّرة بشاشة كاملة"}">${isOJSlot(s)?"🔍 تكبير وقياس":isOccSlot(s)?"🔍 تكبير وتحليل":isCephSlot(s)?"🔍 تكبير وتحليل":"🔍 تكبير"}</button>`}</div><div class="tools nudge"><button class="btn sm" data-act="zin" type="button" title="تكبير">＋</button><button class="btn sm" data-act="zout" type="button" title="تصغير">－</button><button class="btn sm" data-act="up" type="button" title="تحريك للأعلى">▲</button><button class="btn sm" data-act="down" type="button" title="تحريك للأسفل">▼</button><button class="btn sm" data-act="left" type="button" title="تحريك لليسار">◀</button><button class="btn sm" data-act="right" type="button" title="تحريك لليمين">▶</button><button class="btn sm" data-act="reset" type="button" title="إرجاع الوضع التلقائي (يلغي التكبير والتحريك والميلان)">↺ Reset</button></div>${true?`<div class="tools nudge"><button class="btn sm" data-act="tl5" type="button" title="تدوير ربع درجة عكس عقارب الساعة">↺0.25°</button><button class="btn sm" data-act="tl1" type="button" title="تدوير درجة عكس عقارب الساعة">↺1°</button><button class="btn sm" data-act="t0" type="button" title="إرجاع الميلان إلى صفر">${(Math.round((a&&a.tilt||0)*100)/100)}°</button><button class="btn sm" data-act="tr1" type="button" title="تدوير درجة مع عقارب الساعة">↻1°</button><button class="btn sm" data-act="tr5" type="button" title="تدوير ربع درجة مع عقارب الساعة">↻0.25°</button></div>`:""}`:""}`;
       const pv=el.querySelector(".pv");
       pv.onclick=()=>{if(el._noPick)return;openPicker(s);};
       pv.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openPicker(s);}};
@@ -5380,6 +5498,9 @@ function renderSlidesInner(){
           if(moved){a.stickMan={x1:S.x1,y1:S.y1,x2:S.x2,y2:S.y2,pid:a.photoId};el._noPick=true;setTimeout(()=>{el._noPick=false;},300);renderSlides();}};
         cv.addEventListener("pointerup",end);cv.addEventListener("pointercancel",end);
       }
+      if(p&&isCephSlot(s)){const cv=el.querySelector("canvas");   // slide 17: the tracing on the card (points set in «تكبير وتحليل»)
+        if(cv&&cv._map){cephEnsure(p,a);const Fr=cephPtsFrame(p,a,cv._map);if(Fr){const g=cv.getContext("2d"),F={};for(const kk of CEPH_KEYS)F[kk]=[Fr[kk][0]*cv.width,Fr[kk][1]*cv.height];drawCeph(g,F,{k:Math.max(.5,cv.width/600),fs:12,r:2.5,labels:false});
+          if(!p.ceph.man){g.save();g.font="bold 12px sans-serif";g.textBaseline="top";const t="ضع النقاط من «🔍 تكبير وتحليل»",w=g.measureText(t).width+12;g.fillStyle="rgba(255,255,255,.92)";g.fillRect(6,6,w,20);g.fillStyle="#B00000";g.direction="rtl";g.textAlign="left";g.fillText(t,12,9);g.restore();}}}}
       if(p&&isOJSlot(s)){const cv=el.querySelector("canvas"),st=ojStatus(s);
         if(cv){const g=cv.getContext("2d");
           if(!st.ok)drawMsg(g,st.msg,6,6,12,st.busy?"#1E5FA8":"#B00000");
@@ -5420,7 +5541,7 @@ function renderSlidesInner(){
           aiOverjet(p,ojKind(s),new AbortController().signal).then(()=>renderSlides()).catch(e=>{toast(aiErrorText(e));renderSlides();});return;}
         if(act==="occhide"){if(p&&p.occl)p.occl.hide=!p.occl.hide;renderSlides();return;}
         if(act==="occlines"){if(p&&p.occl)p.occl.noLines=!p.occl.noLines;renderSlides();return;}
-        if(act==="zoomv"){if(isOJSlot(s))openOJZoom(s);else if(isOccSlot(s))openOccZoom(s);else openZoomView(s);return;}
+        if(act==="zoomv"){if(isCephSlot(s)){openCephZoom(s);return;}if(isOJSlot(s))openOJZoom(s);else if(isOccSlot(s))openOccZoom(s);else openZoomView(s);return;}
         if(act==="occai"){if(!aiReady()){toast("سجّل الدخول بحساب Google (بالشريط فوق الخطوات) حتى يُستعمل مفتاح Gemini الخاص بحسابك من ورقة Users.");return;}
           if(p&&p.occl&&p.occl.man&&!confirm("النقاط مصححة باليد. هل تريد استبدالها بتحليل تلقائي جديد؟"))return;
           b.disabled=true;b.textContent="⏳ جارٍ التحليل…";p.occlBusy=true;
@@ -5553,7 +5674,9 @@ $("genBtn").onclick=async()=>{try{syncName();}catch(_){}
             if(ext){ext.setAttribute("cx",String(Math.round(gs_.cx)));ext.setAttribute("cy",String(Math.round(gs_.cy)));}}
         }
         if(p){const src=wbSrc(p,s,a,await getFull(p));
-          const R=(w,h)=>renderDisplayed(src,{rot:a.rot,flip:a.flip,align:effAlign(a),bg:wbBg(p,s,a),zoom:a.zoom,tilt:a.tilt,level:a.eyeLevel,dx:a.dx,dy:a.dy,nudged:!!(a.dx||a.dy||(a.zoom&&a.zoom!==1))},w,h);
+          const R0=(w,h)=>renderDisplayed(src,{rot:a.rot,flip:a.flip,align:effAlign(a),bg:wbBg(p,s,a),zoom:a.zoom,tilt:a.tilt,level:a.eyeLevel,dx:a.dx,dy:a.dy,nudged:!!(a.dx||a.dy||(a.zoom&&a.zoom!==1))},w,h);
+          // slide 17: the cephalometric tracing is drawn on the picture
+          const R=isCephSlot(s)&&p.ceph&&p.ceph.pts?(w,h)=>{const c=R0(w,h);try{const Fr=cephPtsFrame(p,a,c._map);if(Fr){const F={};for(const k of CEPH_KEYS)F[k]=[Fr[k][0]*c.width,Fr[k][1]*c.height];drawCeph(c.getContext("2d"),F,{k:Math.max(1,c.width/900),fs:14,r:4,labels:false});}}catch(e){console.warn("ceph",e);}return c;}:R0;
           if(isOJSlot(s)&&p.ojob&&p.ojob.pts){const fr1=frameRect(s);occMap=R(240,Math.max(8,Math.round(240*fr1.h/fr1.w)))._map;}
           if(isOccSlot(s)&&p.occl&&p.occl.pts){const fr1=frameRect(s);occMap=R(240,Math.max(8,Math.round(240*fr1.h/fr1.w)))._map;}
           const fr0=frameRect(s),pk=400/Math.max(fr0.w,fr0.h),vis=R(Math.max(8,fr0.w*pk),Math.max(8,fr0.h*pk))._vis;
@@ -5635,7 +5758,7 @@ $("genBtn").onclick=async()=>{try{syncName();}catch(_){}
     }
     for(const b of fullCache.values())b.close&&b.close();
     zip.file("[Content_Types].xml",ser(ctDoc));
-    status("جارٍ كتابة بيانات المريض…");await piFill(zip);await oaFill(zip);
+    status("جارٍ كتابة بيانات المريض…");await piFill(zip);await oaFill(zip);await cephFill(zip);
 
     if(dropPaths.size){status(`جارٍ حذف ${arNum(dropPaths.size)} شريحة فارغة…`);await dropSlides(zip,dropPaths);}
     status("جارٍ حذف صور المريض السابق غير المستخدمة…");setBar("genBar",.85);
