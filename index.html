@@ -4246,8 +4246,9 @@ function cephSummary(R){if(!R)return "";const f=x=>Math.round(x);
 function drawCeph(g,F,opt){
   opt=opt||{};const k=opt.k||1,R=cephAngles(F);g.save();g.lineCap="round";
   const line=(a,b,col,t0,t1,w)=>{const A=F[a],B=F[b];g.strokeStyle=col;g.lineWidth=(w||2)*k;g.beginPath();g.moveTo(A[0]+(B[0]-A[0])*t0,A[1]+(B[1]-A[1])*t0);g.lineTo(A[0]+(B[0]-A[0])*t1,A[1]+(B[1]-A[1])*t1);g.stroke();};
-  line("S","N","#FFD700",-.1,1.1);line("N","A","#20D0F0",0,1.15);line("N","B","#FF8C00",0,1.08);
-  line("PNS","ANS","#50FF50",-.3,1.1);line("Go","Me","#FF50C8",-.3,1.08);line("U1A","U1","#FFFFFF",0,1.05);line("L1A","L1","#AAAAFF",0,1.08);
+  // every line ends at its points (no overshoot); only the short pieces an angle arc needs are carried on to that arc
+  line("S","N","#FFD700",0,1);line("N","A","#20D0F0",0,1);line("N","B","#FF8C00",0,1);
+  line("PNS","ANS","#50FF50",0,1);line("Go","Me","#FF50C8",0,1);line("U1A","U1","#FFFFFF",0,1);line("L1A","L1","#AAAAFF",0,1);
   const inter=(a,b,c,d)=>{const [x1,y1]=F[a],[x2,y2]=F[b],[x3,y3]=F[c],[x4,y4]=F[d];const den=(x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);if(Math.abs(den)<1e-9)return null;const t=((x1-x3)*(y3-y4)-(y1-y3)*(x3-x4))/den;return [x1+t*(x2-x1),y1+t*(y2-y1)];};
   const dir=(a,b)=>[F[b][0]-F[a][0],F[b][1]-F[a][1]];
   const fs=Math.max(8,Math.round((opt.fs||14)*k*.7));   // smaller writing on the picture
