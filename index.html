@@ -4258,8 +4258,20 @@ function drawCeph(g,F,opt){
   const sz=Math.hypot(...dir("S","N"));
   arc(F.N,dir("N","S"),dir("N","A"),sz*.28,`${Math.round(R.SNA)}°`);
   arc(F.N,dir("N","S"),dir("N","B"),sz*.48,`${Math.round(R.SNB)}°`);
-  arc(inter("U1A","U1","PNS","ANS"),dir("ANS","PNS"),dir("U1A","U1"),sz*.14,`${Math.round(R.U1PP)}°`);
-  arc(inter("L1A","L1","Go","Me"),dir("Me","Go"),dir("L1A","L1"),sz*.16,`${Math.round(R.IMPA)}°`);
+  // U1/PP: one arc around the point where the upper incisor axis meets the palatal plane, from the U1 apex on the incisor
+  // line to the palatal line (as on a hand tracing); both lines are carried to that point
+  {const V=inter("U1A","U1","PNS","ANS"),rr=V?Math.hypot(V[0]-F.U1A[0],V[1]-F.U1A[1]):0;
+   if(V&&rr>1){g.lineWidth=2*k;g.strokeStyle="#FFFFFF";g.beginPath();g.moveTo(F.U1A[0],F.U1A[1]);g.lineTo(V[0],V[1]);g.stroke();
+     g.strokeStyle="#50FF50";g.beginPath();g.moveTo(F.ANS[0],F.ANS[1]);g.lineTo(V[0],V[1]);g.stroke();
+     arc(V,dir("U1A","U1"),dir("ANS","PNS"),rr/k,`${Math.round(R.U1PP)}°`);}
+   else arc(V,dir("ANS","PNS"),dir("U1A","U1"),sz*.14,`${Math.round(R.U1PP)}°`);}
+  // L1/MP: one arc around the point where the lower incisor axis meets the mandibular plane, from the L1 apex on the incisor
+  // line to the mandibular line (as on a hand tracing); both lines are carried down to that point
+  {const V=inter("L1A","L1","Go","Me"),rr=V?Math.hypot(V[0]-F.L1A[0],V[1]-F.L1A[1]):0;
+   if(V&&rr>1){g.lineWidth=2*k;g.strokeStyle="#AAAAFF";g.beginPath();g.moveTo(F.L1A[0],F.L1A[1]);g.lineTo(V[0],V[1]);g.stroke();
+     g.strokeStyle="#FF50C8";g.beginPath();g.moveTo(F.Me[0],F.Me[1]);g.lineTo(V[0],V[1]);g.stroke();
+     arc(V,dir("L1A","L1"),dir("Me","Go"),rr/k,`${Math.round(R.IMPA)}°`);}
+   else arc(V,dir("Me","Go"),dir("L1A","L1"),sz*.16,`${Math.round(R.IMPA)}°`);}
   // MMPA: the planes meet behind the head - shown at Go with a line parallel to the palatal plane
   // MMPA: one arc around the point where the palatal and mandibular planes meet (behind the head), running from PNS on
   // the palatal line down to the mandibular line (as on a hand tracing); both lines are carried back to the arc
