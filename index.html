@@ -329,6 +329,11 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(200px,34
 .s14-row>.arch-box{flex:0 1 560px;min-width:0;margin:12px 14px 14px 0}
 .s14-row .arch-g{grid-template-columns:1fr 1fr!important}
 @media (max-width:1100px){.s14-row{flex-direction:column}.s14-row>.arch-box{flex:none;width:auto;margin:4px 14px 14px;align-self:stretch}}
+.ceph-t{width:100%;border-collapse:separate;border-spacing:0 6px;direction:ltr}
+.ceph-t th{font-size:13px;font-weight:800;color:#0B1D4A;text-align:left;padding:4px 6px}
+.ceph-t thead th{color:#1A8F99;font-size:12.5px}
+.ceph-t td{padding:0 4px}.ceph-t input{width:100%;font:inherit;font-weight:700;padding:6px 8px;border-radius:10px;border:1px solid var(--line);background:var(--surface2);color:var(--ink);text-align:center}
+.ceph-t input::placeholder{color:#1E8C2E;opacity:.9}
 </style>
 
 <script src="face-api.js"></script>
@@ -511,7 +516,8 @@ header.hero{position:relative;display:grid;grid-template-columns:minmax(200px,34
     <div class="gate-msg" id="gateMsg" role="status">⏳ جارٍ التحقق…</div>
   </div>
 </div>
-<div id="archHold" hidden><div class="arch-box" id="archBox">
+<div id="archHold" hidden><div class="arch-box ceph-box" id="cephBox"><div class="pinfo-h"><h2>📐 جدول الزوايا <small>(يُكتب بجدول هذه الشريحة — قيمة المريض تُملأ من التحليل تلقائياً ويمكن كتابتها يدوياً)</small></h2></div>
+<table class="ceph-t"><thead><tr><th>The Angle</th><th>Patient’s value</th><th>Normal value</th></tr></thead><tbody><tr><th>SNA</th><td><input type="text" id="cvSNA" inputmode="decimal"></td><td><input type="text" id="cnSNA"></td></tr><tr><th>SNB</th><td><input type="text" id="cvSNB" inputmode="decimal"></td><td><input type="text" id="cnSNB"></td></tr><tr><th>ANB</th><td><input type="text" id="cvANB" inputmode="decimal"></td><td><input type="text" id="cnANB"></td></tr><tr><th>MMPA</th><td><input type="text" id="cvMMPA" inputmode="decimal"></td><td><input type="text" id="cnMMPA"></td></tr><tr><th>UI/Mx</th><td><input type="text" id="cvUIMX" inputmode="decimal"></td><td><input type="text" id="cnUIMX"></td></tr><tr><th>LI/Mn</th><td><input type="text" id="cvLIMN" inputmode="decimal"></td><td><input type="text" id="cnLIMN"></td></tr></tbody></table></div><div class="arch-box" id="archBox">
     <div class="pinfo-h"><h2>✍️ معلومات الفكّين <small>(إدخال يدوي — تُكتب بهذه الشريحة)</small></h2></div>
     <div class="pinfo-g arch-g">
       <div class="arch-col"><b>Upper arch — الفك العلوي</b>
@@ -1453,7 +1459,13 @@ function piWrite(L,v){
 }
 async function piSlides(zip){return Object.keys(zip.files).filter(n=>/^ppt\/slides\/slide\d+\.xml$/.test(n));}
 /* on template load: the clinic's fixed lines (referred from / systemic health / records by) are taken as the defaults */
+async function cephReadTemplate(zip){
+  try{for(const path of await piSlides(zip)){const x=await zip.file(path).async("string");if(!/Patient.{0,10}value/i.test(x))continue;
+    const doc=parseXml(x);for(const tr of doc.getElementsByTagNameNS(NS.a,"tr")){const tcs=[...tr.getElementsByTagNameNS(NS.a,"tc")];if(tcs.length<3)continue;
+      const key=cephRowKey(tcs[0].textContent);if(!key)continue;const e=$("cn"+key);if(e&&!e.value.trim())e.value=tcs[2].textContent.trim();}}}catch(e){console.warn("cephReadTemplate",e);}
+}
 async function piReadTemplate(zip){
+  await cephReadTemplate(zip);
   try{for(const path of await piSlides(zip)){const x=await zip.file(path).async("string");if(!/Patient\s+specification|Chief\s+Complaint|Records\s+By/i.test(x))continue;
     const doc=parseXml(x);for(const L of piLocate(doc)){if(!["piRef","piSys","piBy"].includes(L.f.id))continue;const e=$(L.f.id);if(e&&!e.value.trim()){if(e.tagName==="SELECT")selSet(e,piRead(L));else e.value=piRead(L);}}}}
   catch(e){console.warn("piReadTemplate",e);}
@@ -1490,7 +1502,7 @@ async function piFill(zip){
 }
 if(!$("piDate").value)$("piDate").value=piTodayStr();
 
-const STATE_FIELDS=["oaUM","oaUR","oaUC","oaLM","oaLR","oaLC","outName","piName","piGender","piAge","piEdu","piAddr","piRef","piSys","piBy","piCC","piDate","closeup","evenFrames","whiteBg","levelBrows","fitLines","alignFaces","faceScale","dropEmpty","blankEmpty"];
+const STATE_FIELDS=["cvSNA","cnSNA","cvSNB","cnSNB","cvANB","cnANB","cvMMPA","cnMMPA","cvUIMX","cnUIMX","cvLIMN","cnLIMN","oaUM","oaUR","oaUC","oaLM","oaLR","oaLC","outName","piName","piGender","piAge","piEdu","piAddr","piRef","piSys","piBy","piCC","piDate","closeup","evenFrames","whiteBg","levelBrows","fitLines","alignFaces","faceScale","dropEmpty","blankEmpty"];
 const P_SKIP=new Set(["file","prev","bg","faceCache","aiBlob","thumbUrl","frame","_wbm","occlBusy","ojBusy","ojAutoTried","occlAutoTried","w","h","video"]);
 const ST_KEEP=4, STATE_MIME="application/zip";
 function stStringify(v){
@@ -4351,20 +4363,26 @@ async function cephWatch(){
       try{await aiCeph(p,new AbortController().signal);}catch(e){console.warn(e);}renderSlides();}}
   finally{cephWatchBusy=false;}
 }
+const CEPH_ROWS={SNA:"SNA",SNB:"SNB",ANB:"ANB",MMPA:"MMPA",UIMX:"U1PP",LIMN:"IMPA"};
+const cephRowKey=t=>{const n=String(t||"").replace(/\s+/g,"").toUpperCase().replace(/[^A-Z]/g,"");return n==="UIMX"||n==="UPP"?"UIMX":n==="LIMN"||n==="IMPA"?"LIMN":CEPH_ROWS[n]?n:null;};
+function cephValues(){const s=slots.find(t=>isCephSlot(t)&&assign[t.id]&&assign[t.id].photoId);if(!s)return null;
+  const a=assign[s.id],p=photos.find(x=>x.id===a.photoId);if(!p||!p.ceph||!p.ceph.pts||!p.prev)return null;
+  const r=((a.rot||0)%360+360)%360,W=r%180?p.prev.height:p.prev.width,H=r%180?p.prev.width:p.prev.height,F={};
+  for(const k of CEPH_KEYS){const t=rawToTurned(p,a.rot,a.flip,p.ceph.pts[k][0],p.ceph.pts[k][1]);F[k]=[t[0]*W,t[1]*H];}return cephAngles(F);}
+/* the table in the program: the analysis gives the patient's values (shown in green as the default); a typed value wins */
+function cephTableHints(){const R=cephValues();for(const k in CEPH_ROWS){const e=$("cv"+k);if(e)e.placeholder=R?String(Math.round(R[CEPH_ROWS[k]])):"—";}}
 /* PowerPoint slide 17: the "Patient's value" column of the angle table */
 async function cephFill(zip){
-  const s=slots.find(t=>isCephSlot(t)&&assign[t.id]&&assign[t.id].photoId);if(!s)return;
-  const a=assign[s.id],p=photos.find(x=>x.id===a.photoId);if(!p||!p.ceph||!p.ceph.pts)return;
-  const r=((a.rot||0)%360+360)%360,W=r%180?p.prev.height:p.prev.width,H=r%180?p.prev.width:p.prev.height,F={};
-  for(const k of CEPH_KEYS){const t=rawToTurned(p,a.rot,a.flip,p.ceph.pts[k][0],p.ceph.pts[k][1]);F[k]=[t[0]*W,t[1]*H];}
-  const R=cephAngles(F),val={SNA:R.SNA,SNB:R.SNB,ANB:R.ANB,MMPA:R.MMPA,"UI/MX":R.U1PP,"U1-PP":R.U1PP,"LI/MN":R.IMPA,IMPA:R.IMPA,"SN-MP":R.SNMP,"U1-SN":R.U1SN};
+  const R=cephValues();
   for(const path of await piSlides(zip)){
     const x=await zip.file(path).async("string");if(!/Patient.{0,10}value/i.test(x))continue;
     const doc=parseXml(x);let n=0;
+    const put=(tc,v)=>{const ts=[...tc.getElementsByTagNameNS(NS.a,"t")];if(!ts.length)return false;ts[0].textContent=v;for(const t of ts.slice(1))t.textContent="";return true;};
     for(const tr of doc.getElementsByTagNameNS(NS.a,"tr")){const tcs=[...tr.getElementsByTagNameNS(NS.a,"tc")];if(tcs.length<2)continue;
-      const name=[...tcs[0].getElementsByTagNameNS(NS.a,"t")].map(t=>t.textContent).join("").replace(/\s+/g,"").toUpperCase();
-      if(!(name in val))continue;const ts=[...tcs[1].getElementsByTagNameNS(NS.a,"t")];if(!ts.length)continue;
-      ts[0].textContent=String(Math.round(val[name]));for(const t of ts.slice(1))t.textContent="";n++;}
+      const key=cephRowKey(tcs[0].textContent);if(!key)continue;
+      const typed=($("cv"+key)||{}).value,pv=typed&&typed.trim()?typed.trim():R?String(Math.round(R[CEPH_ROWS[key]])):null;
+      if(pv!=null&&put(tcs[1],pv))n++;
+      const nv=($("cn"+key)||{}).value;if(tcs[2]&&nv&&nv.trim()&&put(tcs[2],nv.trim()))n++;}
     if(n)zip.file(path,ser(doc));
   }
 }
@@ -5407,7 +5425,7 @@ async function occWatch(){
   try{for(const p of todo){p.occlAutoTried=true;p.occlBusy=true;renderSlides();try{await aiOcclusion(p,new AbortController().signal);}catch(e){console.warn(e);}p.occlBusy=false;renderSlides();}}
   finally{occWatchBusy=false;}
 }
-function renderAll(){try{archRender();}catch(_){}renderSlides();renderPool();renderSummary();updateButtons();scheduleAlign();smileWatch();try{stButtons();}catch(_){}ojWatch();chartWatch();occWatch();cephWatch();
+function renderAll(){try{archRender();}catch(_){}renderSlides();renderPool();renderSummary();updateButtons();scheduleAlign();smileWatch();try{stButtons();}catch(_){}ojWatch();chartWatch();occWatch();cephWatch();try{cephTableHints();}catch(_){}
   for(const a of Object.values(assign))if(a&&a.noWhite)a.noWhite=false;   // no per-photo white-background button any more: the general option applies
   for(const p of photos)if(p.occl&&(p.occl.hide||p.occl.noLines)){p.occl.hide=false;p.occl.noLines=false;}}   // no hide / remove-all buttons any more (lines are removed one by one in the zoom)
 /* slide 16 is always measured by itself: every Overjet / Overbite photo that is placed and not measured yet
@@ -5468,7 +5486,7 @@ function renderSlides(){
   }
 }
 function renderSlidesInner(){
-  const host=$("slides");{const ab=$("archBox");if(ab)$("archHold").appendChild(ab);}host.innerHTML="";
+  const host=$("slides");{const ab=$("archBox");if(ab)$("archHold").appendChild(ab);const cb=$("cephBox");if(cb)$("archHold").appendChild(cb);}host.innerHTML="";
   const bySlide=new Map();for(const s of slots){if(!bySlide.has(s.n))bySlide.set(s.n,[]);bySlide.get(s.n).push(s);}
   for(const [n,list] of bySlide){
     const t=SLIDE_TITLES[n]||[`Slide ${n}`,""];
@@ -5616,6 +5634,8 @@ function renderSlidesInner(){
     drawSlidePreview(sec,list);
     if(list.some(isOccSlot)){sec.insertBefore(chartPanel(),sec.querySelector(".slots"));const dp=diagPanel();if(dp)sec.insertBefore(dp,sec.querySelector(".slots"));}
     if(list.some(isOccSlot)){const o=occOverall();if(o){const d=document.createElement("div");d.className="aligned";d.style.cssText="direction:ltr;text-align:left;font-weight:700;margin:6px 4px";d.textContent="Molar relationship: "+o;sec.insertBefore(d,sec.querySelector(".slots"));}}
+    if(list.some(t=>t.k===17)){const cb=$("cephBox"),sl=sec.querySelector(".slots");   // slide 17: the angle table beside the X-ray
+      if(cb&&sl){const row=document.createElement("div");row.className="s14-row";sl.parentNode.insertBefore(row,sl);row.appendChild(cb);row.appendChild(sl);}else if(cb)sec.appendChild(cb);cephTableHints();}
     if(list.some(t=>t.k===14)){const ab=$("archBox"),sl=sec.querySelector(".slots");   // beside the two photos (right)
       if(ab&&sl){const row=document.createElement("div");row.className="s14-row";sl.parentNode.insertBefore(row,sl);row.appendChild(ab);row.appendChild(sl);}else if(ab)sec.appendChild(ab);}   // slide 14: the hand-typed arch information
     host.appendChild(sec);
