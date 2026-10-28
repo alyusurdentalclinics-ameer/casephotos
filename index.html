@@ -1566,7 +1566,7 @@ async function stReadZip(blob){
 }
 
 /* restore */
-async function stRestore(st,getFile){
+async function stRestore(st,getFile){cephPid=null;
   if(!st||!Array.isArray(st.photos))throw new Error("ملف الحالة غير صالح.");
   if(!tpl){if(ARCH.user&&ARCH.tplInfo){stMsg("جارٍ تحميل قالب المنصة أولاً…");await archLoadTemplate(true);}
     if(!tpl)throw new Error("حمّل القالب أولاً (الخطوة ١) ثم استرجع الحالة.");}
@@ -1583,7 +1583,7 @@ async function stRestore(st,getFile){
   caseChart=st.caseChart||null;
   for(const [id,v] of Object.entries(st.fields||{})){const e=$(id);if(!e)continue;if(e.type==="checkbox")e.checked=!!v;else if(e.tagName==="SELECT")selSet(e,v);else e.value=v;}try{syncName();}catch(_){}
   $("faceScaleOut").textContent=$("faceScale").value+"%";
-  renderAll();
+  cephPid=null;renderAll();
   const miss=st.photos.length-photos.length;
   return {n:photos.length,miss,tplDiff:!!(st.tplName&&tpl&&st.tplName!==tpl.name)};
 }
@@ -4319,10 +4319,10 @@ async function openCephZoom(s){
   document.addEventListener("keydown",key);
   const onRs=()=>{fit();draw();};window.addEventListener("resize",onRs);
   const close=ok=>{document.removeEventListener("keydown",key);window.removeEventListener("resize",onRs);ov.remove();
-    if(ok){writeBack();p.ceph.man=true;}else p.ceph=keep;renderSlides();};
+    if(ok){writeBack();p.ceph.man=true;cephApplyTable();}else p.ceph=keep;renderSlides();};
   ov.querySelectorAll("[data-z]").forEach(b=>b.onclick=()=>{const v=b.dataset.z;if(v==="in")zoomAt(1.3,vw/2,vh/2);else if(v==="out")zoomAt(1/1.3,vw/2,vh/2);
     else if(v==="redo"){if(!aiReady()){toast("سجّل الدخول حتى يُستعمل مفتاح Gemini.");return;}close(false);toast("⏳ جارٍ تحليل الأشعة…");p.ceph=null;renderSlides();
-      aiCeph(p,new AbortController().signal).then(()=>{renderSlides();openCephZoom(s);}).catch(e=>{toast(aiErrorText(e));renderSlides();});}
+      aiCeph(p,new AbortController().signal).then(()=>{cephApplyTable();renderSlides();openCephZoom(s);}).catch(e=>{toast(aiErrorText(e));renderSlides();});}
     else close(v==="ok");});
   draw();
 }
@@ -4359,13 +4359,18 @@ async function aiCeph(p,signal){
 }
 /* a new X-ray on slide 17 (or one never analysed): analysed by itself */
 let cephWatchBusy=false;
+let cephPid=null;
 async function cephWatch(){
+  {const s=slots.find(isCephSlot),a=s&&assign[s.id],p=a&&photos.find(x=>x.id===a.photoId)||null,pid=p;
+   if(pid!==cephPid){const first=cephPid===null&&pid;cephPid=pid;
+     if(p&&!first){p.ceph=null;p.cephAutoTried=false;}       // the photo of the frame was changed: a new analysis
+     if(!first)for(const k in CEPH_ROWS){const e=$("cv"+k);if(e)e.value="";}}}
   if(cephWatchBusy||aiCtl||!aiReady())return;
   const todo=[];for(const s of slots){if(!isCephSlot(s))continue;const a=assign[s.id],p=a&&a.photoId&&photos.find(x=>x.id===a.photoId);
     if(!p||p.video||p.cephBusy||(p.ceph&&p.ceph.pts)||p.cephAutoTried)continue;todo.push([s,p]);}
   if(!todo.length)return;cephWatchBusy=true;
   try{for(const [s,p] of todo){p.cephAutoTried=true;renderSlides();
-      try{await aiCeph(p,new AbortController().signal);}catch(e){console.warn(e);}renderSlides();}}
+      try{await aiCeph(p,new AbortController().signal);cephApplyTable();}catch(e){console.warn(e);}renderSlides();}}
   finally{cephWatchBusy=false;}
 }
 const CEPH_ROWS={SNA:"SNA",SNB:"SNB",ANB:"ANB",MMPA:"MMPA",UIMX:"U1PP",LIMN:"IMPA"};
@@ -4375,6 +4380,7 @@ function cephValues(){const s=slots.find(t=>isCephSlot(t)&&assign[t.id]&&assign[
   const r=((a.rot||0)%360+360)%360,W=r%180?p.prev.height:p.prev.width,H=r%180?p.prev.width:p.prev.height,F={};
   for(const k of CEPH_KEYS){const t=rawToTurned(p,a.rot,a.flip,p.ceph.pts[k][0],p.ceph.pts[k][1]);F[k]=[t[0]*W,t[1]*H];}return cephAngles(F);}
 /* the table in the program: the analysis gives the patient's values (shown in green as the default); a typed value wins */
+function cephApplyTable(){const R=cephValues();for(const k in CEPH_ROWS){const e=$("cv"+k);if(e)e.value=R?String(Math.round(R[CEPH_ROWS[k]])):"";}}
 function cephTableHints(){const R=cephValues();for(const k in CEPH_ROWS){const e=$("cv"+k);if(e)e.placeholder=R?String(Math.round(R[CEPH_ROWS[k]])):"—";}}
 /* PowerPoint slide 17: the "Patient's value" column of the angle table */
 async function cephFill(zip){
