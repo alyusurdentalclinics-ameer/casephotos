@@ -823,7 +823,8 @@ function wbSrc(p,s,a,src){
   const c=whitened(src,p._wbm);try{_whiteCache.set(src,{m:p._wbm,c});}catch(_){}
   return c;
 }
-function wbBg(p,s,a){return p&&whiteOn(s,a,p)&&p._wbm?"#ffffff":p&&p.bg;}
+// face photos: any part of the frame the photo does not reach (top, sides, corners of a turned photo) is always white
+function wbBg(p,s,a){return p&&s&&!s.video&&WHITE_RE.test(s.cat)&&!/^(io_|occ_|e2e_|ceph|opg)/.test(p.cat||"")?"#ffffff":p&&p.bg;}
 /* Draw the photo as it should LOOK in the frame (upright + user rotation/flip, centre-cropped to cover). */
 const _thumbs=new WeakMap();
 function softThumb(src){
@@ -892,7 +893,7 @@ function renderDisplayed(src,adj,outW,outH,target){
     x.translate(c.width/2+ox,c.height/2+oy);if(tE)x.rotate(tE*Math.PI/180);x.scale(s,s);
   }
   if(adj.flip)x.scale(-1,1);x.rotate(r*Math.PI/180);
-  if(A||adj.dx||adj.dy||(adj.zoom&&adj.zoom<1)){ // extend the photo's edge pixels outward so a shrunken / rotated photo never leaves an empty strip
+  if(adj.bg!=="#ffffff"&&(A||adj.dx||adj.dy||(adj.zoom&&adj.zoom<1))){ // extend the photo's edge pixels outward so a shrunken / rotated photo never leaves an empty strip
     // soft extension: the photo's blurred edge colours are stretched outward (no hard streaks)
     const t=softThumb(src),tw=t.width,th=t.height,E=Math.max(sw,sh);
     x.drawImage(t,0,0,tw,1,-sw/2,-sh/2-E,sw,E);x.drawImage(t,0,th-1,tw,1,-sw/2,sh/2,sw,E);
