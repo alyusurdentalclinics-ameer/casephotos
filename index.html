@@ -1758,7 +1758,17 @@ function parseLoose(t){
   if(a<1e9&&b>a){try{return JSON.parse(t.slice(a,b+1));}catch(_){}}
   throw {code:"parse",message:t.slice(0,200)};
 }
+// at most 6 AI requests at the same time (more would hit the per-minute limit of the key); a request refused for the
+// limit waits a little and is asked again
+let aiActive=0;const aiQueue=[];
 async function callAI(prompt,blobs,signal,opt){
+  if(aiActive>=6)await new Promise(r=>aiQueue.push(r));
+  aiActive++;
+  try{for(let tr=0;;tr++){try{return await callAI0(prompt,blobs,signal,opt);}
+      catch(e){if(e&&e.code==="rate_limited"&&tr<2&&!(signal&&signal.aborted)){await sleep(5000*(tr+1),signal);continue;}throw e;}}}
+  finally{aiActive--;const n=aiQueue.shift();if(n)n();}
+}
+async function callAI0(prompt,blobs,signal,opt){
   return curProv()==="gemini"?callGemini(prompt,blobs,signal,opt):callOpenRouter(prompt,blobs,signal,opt);
 }
 const viaLocalServer=()=>/^https?:$/.test(location.protocol)&&/^(127\.0\.0\.1|localhost)$/.test(location.hostname);
@@ -2224,18 +2234,22 @@ async function aiRetryLeftovers(signal){
   const left=photos.filter(p=>!p.video&&!placed.has(p.id)&&(!p.aiSeen||!p.cat||p.cat==="other"||empty.length)).slice(0,14);
   if(!left.length||!empty.length)return false;
   let ch=false;
-  for(const p of left){
+  // 4 photos are asked at the same time (each wave sees the frames still empty after the previous wave)
+  for(let w=0;w<left.length;w+=4){
     const want=[...new Set(slots.filter(free).map(t=>t.cat))];if(!want.length)break;
     const extra=`\n\nSECOND LOOK: this single image was not placed in the first pass. These template frames are STILL EMPTY: ${want.map(k=>k+" ("+(CATS[k]?CATS[k].en.split(":")[0].slice(0,80):k)+")").join("; ")}.
 Look carefully at the image and apply all the rules above. If it is one of these empty categories, answer that category. If it clearly is another category, answer that one. Answer "other" only if it is not an orthodontic record photo at all.`;
-    let res;try{res=await callAI(buildPrompt([p],0)+extra,[p.aiBlob],signal);}catch(e){if(e&&e.code==="cancelled")throw e;console.warn(e);continue;}
-    const arr=Array.isArray(res)?res:(res&&Array.isArray(res.images)?res.images:(res&&res.cat?[res]:[]));const r=arr[0];if(!r)continue;
-    let cat=String(r.cat||"other");if(!CATS[cat]||!!CATS[cat].video!==p.video)cat="other";
-    if(cat==="other"||cat===p.cat&&p.aiSeen)continue;
-    p.aiSeen=true;p.cat=cat;p.conf=Math.max(0,Math.min(1,+r.conf||.5));p.rot=[0,90,180,270].includes(+r.rot)?+r.rot:(p.rot||0);
-    p.why=(String(r.why||"").slice(0,60)+" · فحص ثانٍ").slice(0,80);
-    if(/^(io|e2e)_(right|left)$/.test(p.cat)&&!p.rot){const sd=buccalSide(p);if(sd&&!p.cat.endsWith(sd))p.cat=p.cat.replace(/(right|left)$/,sd);}
-    ch=true;autoAssign();
+    const wave=left.slice(w,w+4);
+    const got=await Promise.all(wave.map(p=>callAI(buildPrompt([p],0)+extra,[p.aiBlob],signal).then(res=>({res}),e=>({e}))));
+    for(let k=0;k<wave.length;k++){const p=wave[k],q=got[k];
+      if(q.e){if(q.e&&q.e.code==="cancelled")throw q.e;console.warn(q.e);continue;}const res=q.res;
+      const arr=Array.isArray(res)?res:(res&&Array.isArray(res.images)?res.images:(res&&res.cat?[res]:[]));const r=arr[0];if(!r)continue;
+      let cat=String(r.cat||"other");if(!CATS[cat]||!!CATS[cat].video!==p.video)cat="other";
+      if(cat==="other"||cat===p.cat&&p.aiSeen)continue;
+      p.aiSeen=true;p.cat=cat;p.conf=Math.max(0,Math.min(1,+r.conf||.5));p.rot=[0,90,180,270].includes(+r.rot)?+r.rot:(p.rot||0);
+      p.why=(String(r.why||"").slice(0,60)+" · فحص ثانٍ").slice(0,80);
+      if(/^(io|e2e)_(right|left)$/.test(p.cat)&&!p.rot){const sd=buccalSide(p);if(sd&&!p.cat.endsWith(sd))p.cat=p.cat.replace(/(right|left)$/,sd);}
+      ch=true;autoAssign();}
   }
   return ch;
 }
@@ -3236,8 +3250,10 @@ Reply with only JSON: {"quadrants":{"UR":[11,12,13,14,15,16,17],"UL":[21,22,23,2
   const pos=t=>{t=+t;return t>50&&t<86?(Math.floor(t/10)-4)*10+t%10:t;};   // deciduous -> the place it holds
   // read 3 times with fixed seeds and keep what the majority says (the same photos give the same chart)
   const reads=[];let lastErr=null;
+  const ask=seed=>callAI(prompt,L.map(x=>x.p.aiBlob),signal,{seed}).then(r=>({r}),e=>({e}));
+  const pre=[ask(7),ask(17)];   // the first two readings at the same time; the third only when they disagree
   for(const seed of [7,17,27]){
-    try{const r=await callAI(prompt,L.map(x=>x.p.aiBlob),signal,{seed});if(!r||typeof r!=="object")continue;
+    try{const qq=await (seed===7?pre[0]:seed===17?pre[1]:ask(27));if(qq.e)throw qq.e;const r=qq.r;if(!r||typeof r!=="object")continue;
       const miss=new Set(),dec=new Set();
       for(const t of (Array.isArray(r.missing)?r.missing:[]))if(ok(t))miss.add(+t);
       for(const t of (Array.isArray(r.deciduous)?r.deciduous:[])){const k=pos(t);if(ok(k))dec.add(k);}
@@ -3623,8 +3639,10 @@ async function aiOcclusionCore(p,signal){
   // a sharper picture than the one used for sorting the photos
   let blob=p.aiBlob;try{const full=await createImageBitmap(p.file,{imageOrientation:"from-image"});blob=await canvasBlob(scaledCanvas(full,1600),"image/jpeg",.9);full.close&&full.close();}catch(_){}
   const runs=[],fronts=[],mids=[];let lastErr=null;occBoxes.dec=new Set();aiOcclusion.why=null;
-  for(const seed of [11,22,33]){
-    try{const r=await callAI(OCC_PROMPT(ctx),[blob],signal,{seed});const B=occBoxes(r);if(B){runs.push(B);fronts.push(/right/i.test(String(r.front||""))?"right":/left/i.test(String(r.front||""))?"left":"");
+  // the three readings are asked at the same time (they do not depend on each other), then used in the same order
+  const pre=[11,22,33].map(seed=>callAI(OCC_PROMPT(ctx),[blob],signal,{seed}).then(r=>({r}),e=>({e})));
+  for(const q of pre){
+    try{const qq=await q;if(qq.e)throw qq.e;const r=qq.r;const B=occBoxes(r);if(B){runs.push(B);fronts.push(/right/i.test(String(r.front||""))?"right":/left/i.test(String(r.front||""))?"left":"");
       const mx=v=>v!=null&&v!==""&&isFinite(+v)&&+v>0&&+v<1000?+v/1000:null;mids.push({u:mx(r.upper_midline_x),l:mx(r.lower_midline_x)});}}
     catch(e){if(e&&e.code==="cancelled")throw e;lastErr=e;console.warn(e);}
   }
@@ -4113,10 +4131,11 @@ async function aiOverjet(p,kind,signal){
     let blob=p.aiBlob;try{const full=await createImageBitmap(p.file,{imageOrientation:"from-image"});blob=await canvasBlob(scaledCanvas(full,1600),"image/jpeg",.9);full.close&&full.close();}catch(_){}
     const reads=[];
     const seeds=[5,15,25];let bad=0;
+    const pre2=seeds.slice(0,2).map(seed=>callAI(OJ_PROMPT(kind),[blob],signal,{seed}).then(r=>({r}),e=>({e})));   // the first two readings at the same time
     for(let si=0;si<seeds.length;si++){const seed=seeds[si];
       if(si===2&&reads.length>=2)break;   // third read only when a read was rejected (points on the wrong tooth / place)
       const fix=si<2?"":kind==="oj"?"\nIMPORTANT: a previous answer put l on the incisor in FRONT of the ruler tip (tooth 11). l must be on tooth 21, over the ruler body, farther along the ruler than u.":"\nIMPORTANT: a previous answer put the points in the open space between the upper and lower teeth (or too close together). Both points are on the LOWER incisor 31 beside the ruler, on its side touching the ruler: l = its top (incisal) edge, u = where the gum ends and the tooth begins, a whole crown apart.";
-      const r=await callAI(OJ_PROMPT(kind)+fix,[blob],signal,{seed});if(!r||typeof r!=="object")continue;
+      const r=si<2?await pre2[si].then(q=>{if(q.e)throw q.e;return q.r;}):await callAI(OJ_PROMPT(kind)+fix,[blob],signal,{seed});if(!r||typeof r!=="object")continue;
       const pt=v=>Array.isArray(v)&&v.length>=2&&isFinite(+v[0])&&isFinite(+v[1])?[Math.max(0,Math.min(1,+v[1]/1000)),Math.max(0,Math.min(1,+v[0]/1000))]:null;
       const o={};let ok=true;for(const k of OJ_KEYS){o[k]=pt(r[k]);if(!o[k])ok=false;}
       // the two points given the wrong way round (U1 on the tooth, L1 at the ruler tip / U1 above L1): swapped back
