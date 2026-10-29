@@ -1161,9 +1161,13 @@ async function archUpload(blob,meta){
   try{AP.index=null;AP.idxP=null;}catch(_){}
   if(meta&&meta.patient!=="__template__"&&!meta.info){meta=Object.assign({info:piInfo(),thumb:archThumb()},meta);}
   const b=await archCall("begin",Object.assign({size:blob.size},meta));
-  const CH=b.chunk||4*1024*1024,n=Math.max(1,Math.ceil(blob.size/CH));   // the server's part size (Drive needs 256 KB multiples)
-  for(let i=0;i<n;i++){const d=await blobToDataUrl(blob.slice(i*CH,(i+1)*CH));await archCall("chunk",{uploadId:b.uploadId,i,data:d.slice(d.indexOf(",")+1)});setBar("archBar",(i+1)/(n+1));}
-  const f=await archCall("finish",{uploadId:b.uploadId});setBar("archBar",null);return f;
+  const CH=b.chunk||4*1024*1024,n=Math.max(1,Math.ceil(blob.size/CH)),bar=!(meta&&meta.noBar);   // the server's part size (Drive needs 256 KB multiples)
+  // the parts must go in order (Drive resumable upload); the next part is prepared while the current one travels
+  const prep=i=>blobToDataUrl(blob.slice(i*CH,(i+1)*CH)).then(d=>d.slice(d.indexOf(",")+1));
+  let nx=prep(0);
+  for(let i=0;i<n;i++){const d=await nx;if(i+1<n)nx=prep(i+1);await archCall("chunk",{uploadId:b.uploadId,i,data:d});if(bar)setBar("archBar",(i+1)/(n+1));
+    if(meta&&meta.onPart)try{meta.onPart(i+1,n);}catch(_){}}
+  const f=await archCall("finish",{uploadId:b.uploadId});if(bar)setBar("archBar",null);return f;
 }
 async function archDownload(id,opt){
   const PDF=!!(opt&&opt.pdf),BAR=(opt&&opt.bar)||"archBar",MSG=(opt&&opt.msg)||archMsg;
@@ -1607,15 +1611,17 @@ async function stGuard(fn){if(stBusy)return;stBusy=true;stButtons();try{await fn
 function stButtons(){$("stSave").disabled=stBusy||!photos.length;$("stFile").disabled=stBusy||!photos.length;$("stOpen").disabled=stBusy;$("stBack").disabled=stBusy||!$("stList").value;}
 
 /* platform: the state goes to the patient's folder next to the presentations */
-async function archSaveState(json,files,auto){
+async function archSaveState(json,files,auto,par){
   if(!ARCH.user)return;const patient=stPatient();
   if(!patient){if(!auto)archMsg("اكتب اسم المريض بخانة «اسم الملف» حتى تنحفظ الحالة بأرشيفه.",true);return;}
-  while(ARCH.busy)await sleep(400);
-  ARCH.busy=true;archRender();archMsg(`جارٍ حفظ حالة البرنامج بأرشيف المريض ${patient}…`);
-  try{const z=await stBuildZip(json,files);const f=await archUpload(z,{patient,fileName:patient+" - حالة البرنامج",kind:"state",notes:$("archNotes").value.trim()});
-    archMsg(`✓ حُفظت حالة البرنامج بالأرشيف: ${f.case.fileName}`);await archNames();if(key($("archQ").value)===key(patient))archFind();}
+  // par: saved at the same time as the presentation (its own upload, its own message) - no waiting for it
+  if(!par){while(ARCH.busy)await sleep(400);ARCH.busy=true;archRender();archMsg(`جارٍ حفظ حالة البرنامج بأرشيف المريض ${patient}…`);}
+  const say=par?(m,bad)=>{try{toast(m);}catch(_){}if(bad)console.warn(m);}:archMsg;
+  try{const z=await stBuildZip(json,files);const f=await archUpload(z,{patient,fileName:patient+" - حالة البرنامج",kind:"state",notes:$("archNotes").value.trim(),noBar:!!par});
+    if(par)archMsg(`✓ حُفظت حالة البرنامج بالأرشيف: ${f.case.fileName}`);else say(`✓ حُفظت حالة البرنامج بالأرشيف: ${f.case.fileName}`);
+    await archNames();if(key($("archQ").value)===key(patient))archFind();}
   catch(e){archMsg("تعذّر حفظ الحالة بالأرشيف: "+e.message,true);}
-  finally{ARCH.busy=false;setBar("archBar",null);archRender();}
+  finally{if(!par){ARCH.busy=false;setBar("archBar",null);archRender();}}
 }
 async function archRestoreState(f){
   const {st,getFile}=await stReadZip(f.blob);
@@ -5893,7 +5899,9 @@ $("genBtn").onclick=async()=>{try{syncName();}catch(_){}
     if(!/\.pptx$/i.test(fname))fname+=".pptx";
     ARCH.last={name:fname,blob:out,patient:$("outName").value.trim(),saved:false};archRender();
     await saveFile(fname,out);
-    if(ARCH.user&&($("archSave").checked||$("archStateSave").checked))(async()=>{if($("archSave").checked)await archSaveLast();if($("archStateSave").checked&&preState)await archSaveState(preState.json,preState.files,true);})();
+    if(ARCH.user&&($("archSave").checked||$("archStateSave").checked))(async()=>{const J=[];   // presentation and state go up at the same time
+      if($("archSave").checked)J.push(archSaveLast());if($("archStateSave").checked&&preState)J.push(archSaveState(preState.json,preState.files,true,$("archSave").checked));
+      await Promise.all(J);})();
     status(`تم: ${fname} (${(out.size/1048576).toFixed(1)} MB)${dropPaths.size?` · حُذفت ${arNum(dropPaths.size)} شريحة فارغة`:""}${skippedVideo?` · ${arNum(skippedVideo)} فيديو بقي من القالب`:""}`);
     $("st4").classList.add("done");$("genStatus").dataset.done="1";
   }catch(err){console.error(err);status("تعذّر إنشاء العرض: "+(err.message||err));}
