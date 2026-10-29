@@ -3720,7 +3720,15 @@ async function openOccZoom(s){
   }
   const fr=frameRect(s),ar=fr.w/fr.h,BW=3000,BH=Math.round(BW/ar);
   let full=null;try{full=await createImageBitmap(p.file,{imageOrientation:"from-image"});}catch(_){}
-  const big=renderDisplayed(wbSrc(p,s,a,full||p.prev),{rot:a.rot,flip:a.flip,align:effAlign(a),bg:wbBg(p,s,a),zoom:a.zoom,tilt:a.tilt,level:a.eyeLevel,dx:a.dx,dy:a.dy,nudged:!!(a.dx||a.dy||(a.zoom&&a.zoom!==1))},BW,BH);
+  // the zoom shows the WHOLE photo (same tilt as the slide), not only the part inside the slide frame: the molars at the
+  // far end of the side photo are often cut off by the frame
+  let A0=effAlign(a),AZ=A0;
+  if(A0&&A0.td>0&&A0.pd>0){const r0=((a.rot||0)%360+360)%360,src0=full||p.prev,pa=(r0%180?src0.height/src0.width:src0.width/src0.height);
+    const hF=A0.td/A0.pd,wF=hF*pa/ar,K=Math.min(1,.98/Math.max(hF,wF));
+    if(K<.999){const A1=Object.assign({},A0,{td:A0.td*K});
+      // the photo centre is put in the middle of the view
+      A1.px=.5;A1.py=.5;A1.tx=.5;A1.ty=.5;AZ=A1;}}
+  const big=renderDisplayed(wbSrc(p,s,a,full||p.prev),{rot:a.rot,flip:a.flip,align:AZ,bg:wbBg(p,s,a),zoom:a.zoom,tilt:a.tilt,level:a.eyeLevel,dx:AZ===A0?a.dx:0,dy:AZ===A0?a.dy:0,nudged:AZ!==A0||!!(a.dx||a.dy||(a.zoom&&a.zoom!==1))},BW,BH);
   if(full&&full.close)full.close();
   const map=big._map,inv=invMap(map),keep=JSON.parse(JSON.stringify(p.occl));
   const S={};{const F=occPtsFrame(p,a,map);for(const k of OCC_KEYS)S[k]=F[k].slice();}
@@ -5851,11 +5859,32 @@ $("genBtn").onclick=async()=>{try{syncName();}catch(_){}
     const work=slots.filter(s=>!dropPaths.has(s.path)&&((assign[s.id]&&assign[s.id].photoId)||(blank&&!s.video)));
     const bySlide=new Map();for(const s of work){if(!bySlide.has(s.path))bySlide.set(s.path,[]);bySlide.get(s.path).push(s);}
     const fullCache=new Map();
-    const getFull=async p=>{
-      if(p.video)return p.frame;
-      if(!fullCache.has(p.id)){for(const [k,v] of fullCache){v.close&&v.close();fullCache.delete(k);} fullCache.set(p.id,await createImageBitmap(p.file,{imageOrientation:"from-image"}));}
-      return fullCache.get(p.id);
+    // faster, same quality: each photo is decoded only as large as its biggest frame really shows it (the frames are stored
+    // at 1800 px; a 6000 px photo shown 1800 px wide does not need its full size), plus a 15% margin; kept for the next frames
+    const needScale=p=>{let m=0;
+      for(const s of work){const a=assign[s.id];if(!a||a.photoId!==p.id)continue;
+        try{const g=G(s),kk=1800/Math.max(g.cx,g.cy),W=Math.round(g.cx*kk),H=Math.round(g.cy*kk),turned=g.rot===90||g.rot===270,w=turned?H:W,h=turned?W:H;
+          const c=renderDisplayed(p.prev,{rot:a.rot,flip:a.flip,align:effAlign(a),bg:"#fff",zoom:a.zoom,tilt:a.tilt,level:a.eyeLevel,dx:a.dx,dy:a.dy,nudged:!!(a.dx||a.dy||(a.zoom&&a.zoom!==1))},Math.max(8,Math.round(w/20)),Math.max(8,Math.round(h/20)));
+          const M=c._map;if(!M)return 1;const p0=M(0,0),p1=M(1,0),p2=M(0,1);
+          let ow=Math.hypot((p1[0]-p0[0])*w,(p1[1]-p0[1])*h),oh=Math.hypot((p2[0]-p0[0])*w,(p2[1]-p0[1])*h);   // the photo's size on the stored picture (px)
+          const v=c._vis;if(v){ow/=Math.max(.05,Math.min(v.x1-v.x0,v.y1-v.y0));oh/=Math.max(.05,Math.min(v.x1-v.x0,v.y1-v.y0));}   // a frame shrunk to the photo is drawn larger
+          const r=((a.rot||0)%360+360)%360,sw=r%180?p.h:p.w,sh=r%180?p.w:p.h;
+          m=Math.max(m,ow/sw,oh/sh);}catch(_){return 1;}}
+      return m>0?Math.min(1,m*1.15):1;};
+    const getFull=p=>{
+      if(p.video)return Promise.resolve(p.frame);
+      if(!fullCache.has(p.id)){
+        if(fullCache.size>=4){const [k0,v0]=fullCache.entries().next().value;v0.then(b=>b&&b.close&&b.close(),()=>{});fullCache.delete(k0);}
+        const sc=p.w&&p.h?needScale(p):1;
+        fullCache.set(p.id,(async()=>{let bm=null;
+          if(sc<.97)try{bm=await createImageBitmap(p.file,{imageOrientation:"from-image",resizeWidth:Math.max(16,Math.round(p.w*sc)),resizeHeight:Math.max(16,Math.round(p.h*sc)),resizeQuality:"high"});}catch(_){bm=null;}
+          return bm||createImageBitmap(p.file,{imageOrientation:"from-image"});})());}
+      const v=fullCache.get(p.id);fullCache.delete(p.id);fullCache.set(p.id,v);   // most recently used last: never the one dropped
+      return v;
     };
+    // the next frame's photo is decoded while the current frame is being made
+    const order=[...bySlide.values()].flat();
+    const prefetch=s=>{const i=order.indexOf(s),n=order[i+1],a=n&&assign[n.id],q=a&&a.photoId&&photos.find(x=>x.id===a.photoId);if(q&&!q.video)getFull(q).catch(()=>{});};
     let k=0,total=work.length,seq=0,skippedVideo=0;
     for(const [path,list] of bySlide){
       const doc=parseXml(await zip.file(path).async("string"));
@@ -5877,7 +5906,7 @@ $("genBtn").onclick=async()=>{try{syncName();}catch(_){}
             if(off){off.setAttribute("x",String(Math.round(gs_.x)));off.setAttribute("y",String(Math.round(gs_.oy)));}
             if(ext){ext.setAttribute("cx",String(Math.round(gs_.cx)));ext.setAttribute("cy",String(Math.round(gs_.cy)));}}
         }
-        if(p){const src=wbSrc(p,s,a,await getFull(p));
+        if(p){const src=wbSrc(p,s,a,await getFull(p));prefetch(s);
           const R0=(w,h)=>renderDisplayed(src,{rot:a.rot,flip:a.flip,align:effAlign(a),bg:wbBg(p,s,a),zoom:a.zoom,tilt:a.tilt,level:a.eyeLevel,dx:a.dx,dy:a.dy,nudged:!!(a.dx||a.dy||(a.zoom&&a.zoom!==1))},w,h);
           // slide 17: the cephalometric tracing is drawn on the picture
           const R=isCephSlot(s)&&p.ceph&&p.ceph.pts?(w,h)=>{const c=R0(w,h);try{const Fr=cephPtsFrame(p,a,c._map);if(Fr){const F={};for(const k of CEPH_KEYS)F[k]=[Fr[k][0]*c.width,Fr[k][1]*c.height];drawCeph(c.getContext("2d"),F,{k:Math.max(1,c.width/900),fs:14,r:4,labels:false});}}catch(e){console.warn("ceph",e);}return c;}:R0;
@@ -5960,7 +5989,7 @@ $("genBtn").onclick=async()=>{try{syncName();}catch(_){}
       }
       zip.file(path,xmlStr);zip.file(relsPath,ser(rels));
     }
-    for(const b of fullCache.values())b.close&&b.close();
+    for(const b of fullCache.values())b.then(x=>x&&x.close&&x.close(),()=>{});
     zip.file("[Content_Types].xml",ser(ctDoc));
     status("جارٍ كتابة بيانات المريض…");await piFill(zip);await oaFill(zip);await cephFill(zip);
 
