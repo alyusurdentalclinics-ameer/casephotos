@@ -1063,11 +1063,13 @@ async function decodeAt(p,long){
     try{return await createImageBitmap(p.file,{imageOrientation:"from-image",resizeWidth:Math.max(1,Math.round(p.w*k)),resizeHeight:Math.max(1,Math.round(p.h*k)),resizeQuality:"high"});}catch(_){}}
   return createImageBitmap(p.file,{imageOrientation:"from-image"});
 }
-async function importFile(f){
+async function importFile(f,hint){
   const isVideo=f.type.startsWith("video/")||/\.(mp4|mov|m4v)$/i.test(f.name);
-  let full,W=0,H=0;
+  let full,W=0,H=0,aiKeep=null;
   if(isVideo) full=await videoFrame(f);
-  else{
+  else if(hint&&hint.ai&&hint.w&&hint.h){   // restore: the saved working picture is used (no decoding of the full photo at all)
+    try{full=await createImageBitmap(hint.ai);W=hint.w;H=hint.h;aiKeep=hint.ai;}catch(_){full=null;}}
+  if(!isVideo&&!full){
     // faster: a JPEG is decoded straight at the working size (1100 px, the largest picture made here) instead of its full
     // 24 megapixels; the full size is read from the file header (the full photo is still used for the slides)
     const sz=/jpe?g$/i.test(f.type||"")||/\.jpe?g$/i.test(f.name||"")?await jpegSize(f):null;
@@ -1081,7 +1083,7 @@ async function importFile(f){
   const ai=scaledCanvas(full,1100);
   const prev=scaledCanvas(ai,700);
   const bg=sampleBg(prev);
-  const [aiBlob,thB]=await Promise.all([canvasBlob(ai,"image/jpeg",.82),canvasBlob(scaledCanvas(prev,320),"image/jpeg",.8)]);
+  const [aiBlob,thB]=await Promise.all([aiKeep||canvasBlob(ai,"image/jpeg",.82),canvasBlob(scaledCanvas(prev,320),"image/jpeg",.8)]);
   const thumbUrl=URL.createObjectURL(thB);
   const p={id:"p"+(++photoSeq),file:f,name:f.name,video:isVideo,prev,bg,faceCache:{},aiBlob,thumbUrl,w:W,h:H,cat:null,conf:0,rot:0,why:""};
   if(isVideo)p.frame=full;else full.close&&full.close();
@@ -1569,7 +1571,7 @@ async function piFill(zip){
 if(!$("piDate").value)$("piDate").value=piTodayStr();
 
 const STATE_FIELDS=["cvSNA","cnSNA","cvSNB","cnSNB","cvANB","cnANB","cvMMPA","cnMMPA","cvUIMX","cnUIMX","cvLIMN","cnLIMN","oaUM","oaUR","oaUC","oaLM","oaLR","oaLC","outName","piName","piGender","piAge","piEdu","piAddr","piRef","piSys","piBy","piCC","piDate","closeup","evenFrames","whiteBg","levelBrows","fitLines","alignFaces","faceScale","dropEmpty","blankEmpty"];
-const P_SKIP=new Set(["file","prev","bg","aiBlob","thumbUrl","frame","_wbm","occlBusy","ojBusy","ojAutoTried","occlAutoTried","w","h","video"]);
+const P_SKIP=new Set(["file","prev","bg","aiBlob","thumbUrl","frame","_wbm","occlBusy","ojBusy","ojAutoTried","occlAutoTried","video"]);
 const ST_KEEP=4, STATE_MIME="application/zip";
 function stStringify(v){
   return JSON.stringify(v,(k,x)=>{
@@ -1585,7 +1587,8 @@ function workState(){
   const fields={};for(const id of STATE_FIELDS){const e=$(id);if(e)fields[id]=e.type==="checkbox"?e.checked:e.value;}
   const ph=photos.map(p=>{const o={};for(const k of Object.keys(p))if(!P_SKIP.has(k))o[k]=p[k];return o;});
   const json=stStringify({v:1,app:"CasePhotos",at:new Date().toISOString(),tplName:tpl?tpl.name:"",photoSeq,photos:ph,assign,caseChart,fields});
-  return {json,files:photos.map(p=>({id:p.id,file:p.file}))};
+  // the small working picture (1100 px) goes with each photo: a restore then needs no decoding of the full photos
+  return {json,files:photos.map(p=>({id:p.id,file:p.file,ai:p.video?undefined:p.aiBlob}))};
 }
 const stPatient=()=>$("outName").value.trim();
 function stLabel(r){const d=new Date(r.at);return `${r.name||"بدون اسم"} — ${isNaN(d)?r.at:d.toLocaleString("ar-IQ",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"})} — ${arNum(r.n)} صورة${r.why?" — "+r.why:""}`;}
@@ -1624,7 +1627,8 @@ async function stBuildZip(json,files,prog){
   let done=0;const P=new Array(files.length);let nx=0;
   await Promise.all(Array.from({length:Math.min(4,files.length)},async()=>{while(nx<files.length){const i=nx++;P[i]=await stPackFile(files[i].file);prog&&prog(++done/files.length);}}));
   for(let i=0;i<files.length;i++){const f=P[i];if(!f)continue;
-    zip.file("files/"+files[i].id,f,{binary:true,compression:"STORE"});zip.file("files/"+files[i].id+".name",(f.name||"photo")+"\n"+(f.type||""));}
+    zip.file("files/"+files[i].id,f,{binary:true,compression:"STORE"});zip.file("files/"+files[i].id+".name",(f.name||"photo")+"\n"+(f.type||""));
+    if(files[i].ai)zip.file("files/"+files[i].id+".ai",files[i].ai,{binary:true,compression:"STORE"});}
   return zip.generateAsync({type:"blob",mimeType:STATE_MIME});
 }
 async function stReadZip(blob){
@@ -1632,7 +1636,9 @@ async function stReadZip(blob){
   const st=stParse(await sf.async("string"));
   const getFile=async sp=>{const z=zip.file("files/"+sp.id);if(!z)return null;const nm=zip.file("files/"+sp.id+".name");
     const [n,ty]=nm?(await nm.async("string")).split("\n"):[sp.name||"photo",""];
-    return new File([await z.async("blob")],n||sp.name||"photo",{type:ty||(/\.(mp4|mov|m4v)$/i.test(n)?"video/mp4":"image/jpeg")});};
+    const fl=new File([await z.async("blob")],n||sp.name||"photo",{type:ty||(/\.(mp4|mov|m4v)$/i.test(n)?"video/mp4":"image/jpeg")});
+    const za=zip.file("files/"+sp.id+".ai");if(za)try{fl.__ai=await za.async("blob");}catch(_){}
+    return fl;};
   return {st,getFile};
 }
 
@@ -1643,8 +1649,8 @@ async function stRestore(st,getFile){cephPid=null;
     if(!tpl)throw new Error("حمّل القالب أولاً (الخطوة ١) ثم استرجع الحالة.");}
   // the photos are read 4 at a time (the decoding runs off the page), the order is kept
   const res=new Array(st.photos.length);let i=0,nx=0;
-  await Promise.all(Array.from({length:Math.min(4,st.photos.length)},async()=>{while(nx<st.photos.length){const j=nx++,sp=st.photos[j];
-    try{const f=await getFile(sp);if(!f)continue;const p=await importFile(f);const keep={w:p.w,h:p.h,video:p.video};
+  await Promise.all(Array.from({length:Math.min(6,st.photos.length)},async()=>{while(nx<st.photos.length){const j=nx++,sp=st.photos[j];
+    try{const f=await getFile(sp);if(!f)continue;const p=await importFile(f,{ai:f.__ai,w:sp.w,h:sp.h});const keep={w:p.w,h:p.h,video:p.video};
       Object.assign(p,sp,keep);p.file=f;p.occlBusy=false;p.ojBusy=false;res[j]=p;}
     catch(e){console.warn(e);}
     stMsg(`جارٍ استرجاع الصور… ${arNum(++i)} من ${arNum(st.photos.length)}`);}}));
@@ -1702,8 +1708,8 @@ $("stBack").onclick=()=>stGuard(async()=>{const at=$("stList").value;if(!at)retu
   const rec=await stTx("readonly",os=>os.get(at));if(!rec)throw new Error("الحالة غير موجودة.");
   if(photos.length&&!confirm("ترجع لهذه الحالة؟ الحالة الحالية تنحفظ أولاً حتى تقدر ترجع لها."))return;
   if(photos.length)await stSaveLocal("قبل الرجوع");
-  const byId=new Map((rec.files||[]).map(x=>[x.id,x.file]));
-  stDoneMsg(await stRestore(stParse(rec.json),async sp=>byId.get(sp.id)||null),"من هذا الجهاز");});
+  const byId=new Map((rec.files||[]).map(x=>[x.id,x]));
+  stDoneMsg(await stRestore(stParse(rec.json),async sp=>{const x=byId.get(sp.id);if(!x)return null;const f=x.file;if(x.ai&&f)try{f.__ai=x.ai;}catch(_){}return f;}),"من هذا الجهاز");});
 stRenderList().then(stButtons);
 
 /* ---------- AI ---------- */
@@ -3763,6 +3769,11 @@ async function openOccZoom(s){
   if(full&&full.close)full.close();
   const map=big._map,inv=invMap(map),keep=JSON.parse(JSON.stringify(p.occl));
   const S={};{const F=occPtsFrame(p,a,map);for(const k of OCC_KEYS)S[k]=F[k].slice();}
+  // a molar the analysis did not find has its points on top of each other in the middle: they are spread out behind the
+  // premolar (lower groove between L5|L6 and L6 distal, upper MB cusp a little above and forward) so they can be seen and moved
+  {const d=(u,v)=>Math.hypot(S[u][0]-S[v][0],S[u][1]-S[v][1]);
+   if(d("u6","l6g")<.015||d("l6g","l56")<.015){const x5=S.l56[0],y5=S.l56[1],x6=S.l6d[0],dx=Math.abs(x6-x5)>.03?x6-x5:(S.l56[0]-S.l34[0])*1.6||.12;
+     const cl=v=>Math.max(.02,Math.min(.98,v));S.l6g=[cl(x5+dx*.5),y5];S.u6=[cl(x5+dx*.3),cl(y5-.05)];if(Math.abs(x6-x5)<=.03)S.l6d=[cl(x5+dx),y5];}}
   const ov=document.createElement("div");
   ov.style.cssText="position:fixed;inset:0;z-index:9999;background:#0a1014;display:flex;flex-direction:column;direction:rtl;overflow:hidden;box-sizing:border-box;max-width:100%;max-height:100%;font-family:Tajawal,Tahoma,sans-serif";
   ov.innerHTML=`<button class="btn sm" data-z="ok" type="button" title="إغلاق (يحفظ التعديلات)" style="position:absolute;top:10px;left:10px;z-index:3;font-size:20px;line-height:1;padding:6px 12px;background:#C00000;color:#fff;border-radius:50%">✕</button><div style="display:flex;gap:6px 8px;align-items:center;padding:8px 12px 8px 64px;color:#fff;flex-wrap:wrap;background:#0a1014;min-width:0;max-width:100%;box-sizing:border-box;flex:none">
