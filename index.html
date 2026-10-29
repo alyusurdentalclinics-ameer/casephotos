@@ -1222,7 +1222,9 @@ async function archUpload(blob,meta){
 async function archDownload(id,opt){
   const PDF=!!(opt&&opt.pdf),BAR=(opt&&opt.bar)||"archBar",MSG=(opt&&opt.msg)||archMsg;
   // 1 MB parts (big replies through the Apps Script web app can come back empty / broken), fetched 6 at a time
-  const inf=await archCall("info",{id,cs:(opt&&opt.cs)||1048576,pdf:PDF}),N=inf.chunks,parts=new Array(N);
+  // the size is already known from the archive list: the parts are asked for at once (no «info» round trip first)
+  const inf=!PDF&&opt&&opt.size>0&&opt.name?{size:opt.size,fileName:opt.name,cs:1048576,chunks:Math.max(1,Math.ceil(opt.size/1048576))}
+    :await archCall("info",{id,cs:(opt&&opt.cs)||1048576,pdf:PDF}),N=inf.chunks,parts=new Array(N);
   const CH=inf.cs||4*1048576,PAR=Math.min((opt&&opt.par)||4,N);let done=0,next=0,stop=null;const t0=Date.now();const failed=[];
   const one=async i=>{
     const want=Math.min(CH,inf.size-i*CH);let err=null;
@@ -1249,7 +1251,10 @@ async function archDownload(id,opt){
 }
 
 /* ---------- archive page: search a patient → his information, photo and files (download / view / restore) ---------- */
-const AP={pdf:new Map(),cur:null,busy:new Map(),has:new Set()};
+const AP={pdf:new Map(),cur:null,busy:new Map(),has:new Set(),st:new Map()};
+/* a saved program state of the patient shown is fetched in the background, so «↩ استرجاع الحالة» starts at once */
+function apStatePrefetch(c){if(!c||AP.st.has(c.id)||!(c.size>0))return;
+  const pr=archDownload(c.id,{size:c.size,name:c.fileName,par:4,bar:"_none_",msg:m=>{if(AP.stShow===c.id)apMsg(m);}});pr.catch(()=>AP.st.delete(c.id));AP.st.set(c.id,pr);}
 /* the PDF copies are kept on this device (IndexedDB) and fetched in the background as soon as the patient is shown,
    so «👁 عرض» opens at once */
 const pdfDB=()=>new Promise((res,rej)=>{const q=indexedDB.open("cp_pdf",1);q.onupgradeneeded=()=>q.result.createObjectStore("p");q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});
@@ -1330,6 +1335,8 @@ function apRender(cases){
         ${rows?`<div class="pc-info">${rows}</div>`:""}${info.cc?`<div class="pc-cc">الشكوى: ${esc(info.cc)}</div>`:""}<div class="pc-files">${files}</div></div></div>`;}).join("");
     $("apList").querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>apAct(b.closest(".pf").dataset.id,b.closest(".pf").dataset.name,b.dataset.a));
     for(const c of cases)if(c.hasPdf)AP.has.add(c.id);
+    // one patient on the screen: his newest saved state starts coming down now
+    if(by.size===1){const sc=cases.filter(c=>/\.cpstate$/i.test(c.fileName)).sort((x,y)=>new Date(y.date)-new Date(x.date))[0];if(sc)apStatePrefetch(sc);}
     // in the background: the newest 3 presentations get their PDF on this device (made on the platform first if missing)
     (async()=>{for(const c of cases.filter(c=>/\.pptx$/i.test(c.fileName)).slice(0,3)){if($("archPage").hidden)break;try{await apPdf(c.id,c.hasPdf,true);}catch(e){console.warn("prefetch",e);}}})();
     for(const c of cases)if(AP.pdf.has(c.id))apMark(c.id);else pdfGet(c.id).then(b=>{if(b){AP.pdf.set(c.id,URL.createObjectURL(b));apMark(c.id);}});
@@ -1366,8 +1373,10 @@ async function apAct(id,name,act){
     // the current case is saved on this device in the background (its picture of the case is taken at once) - the download
     // starts straight away instead of waiting for that save
     if(photos.length)try{stSaveLocal("قبل الاسترجاع من الأرشيف").catch(e=>console.warn(e));}catch(_){}
-    ARCH.busy=true;apMsg("جارٍ تنزيل حالة البرنامج من الأرشيف…");let f=null;
-    try{f=await archDownload(id,Object.assign({par:6},opt));}catch(e){apMsg("تعذّر: "+e.message,true);}finally{ARCH.busy=false;setBar("apBar",null);}
+    ARCH.busy=true;apMsg("جارٍ تنزيل حالة البرنامج من الأرشيف…");setBar("apBar",.02);let f=null;
+    const c=(AP.index||[]).find(x=>x.id===id)||{};
+    AP.stShow=id;   // a download already running in the background shows its progress from now on
+    try{if(AP.st.has(id))f=await AP.st.get(id).catch(()=>null);if(!f)f=await archDownload(id,Object.assign({par:6,size:c.size,name:c.fileName||name},opt));}catch(e){apMsg("تعذّر: "+e.message,true);}finally{ARCH.busy=false;AP.stShow=null;setBar("apBar",null);}
     if(f){apClose();stGuard(async()=>{await archRestoreState(f);});}return;}
   if(act==="dl"){ARCH.busy=true;apMsg("جارٍ تنزيل الملف…");
     try{const f=await archDownload(id,opt);await saveFile(f.name,f.blob);apMsg("✓ نُزّل: "+f.name);}
