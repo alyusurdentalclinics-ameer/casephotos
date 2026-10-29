@@ -2302,7 +2302,9 @@ async function aiCompareOcclusal(signal){
   const isU=p=>{try{const c=renderDisplayed(p.prev,{rot:p.rot||0},(p.rot||0)%180?p.prev.height:p.prev.width,(p.rot||0)%180?p.prev.width:p.prev.height),A=archInfo(c);
     return !!A&&A.h>.55&&A.w*(A.asp||c.width/c.height)/A.h<1.7;}catch(_){return false;}};
   const L=[...photos.filter(p=>!p.video&&/^(occ_upper|occ_lower)$/.test(p.cat||"")),
-           ...photos.filter(p=>!p.video&&(p.cat==="other"||/^(io_|e2e_)/.test(p.cat||""))&&isU(p))].slice(0,12);
+           // ruler photos (slide 16) and side views are never occlusal: shown together with the arches they made the AI
+           // read the LOWER arch as upper (tested) - only unrecognised / frontal-intraoral photos are checked for a U
+           ...photos.filter(p=>!p.video&&(p.cat==="other"||p.cat==="io_frontal")&&isU(p))].slice(0,12);
   if(!L.length)return false;
   const prompt=`These ${L.length} images are dental photos of one patient; most of them should be OCCLUSAL photos (biting-surface view of one whole dental arch, a U-shaped row of teeth, photographed in a mirror, so the front teeth can be at the top OR the bottom of the photo - that does NOT tell upper from lower). For EACH image answer plain facts:
 - view: "occlusal" if it shows the biting surfaces of one whole arch as a U (looking down onto / up into one jaw), "other" for anything else (front or side view of closed teeth, face photos, x-rays).
@@ -2314,15 +2316,19 @@ For the occlusal ones look at what fills the INSIDE of the U:
 - incisors: "broad" if the two central front teeth are clearly WIDER than the teeth next to them (upper centrals), "narrow" if the four front teeth are all small and similar in width (lower incisors), "unclear".
 - quality: 0-10, how good the photo is (whole arch from the last molar on one side to the last molar on the other, centred, sharp, the other jaw hidden or only at the edge).
 Reply with only a JSON array, one object per image in order: [{"n":1,"view":"occlusal","middle":"palate","rugae":true,"papilla":true,"frenum":false,"incisors":"broad","quality":8}]`;
-  const r=await callAI(prompt,L.map(p=>p.aiBlob),signal);
-  const arr=Array.isArray(r)?r:(r&&Array.isArray(r.images)?r.images:[]);if(arr.length!==L.length)return false;
+  // two readings at the same time; their scores are added (one odd answer no longer flips a jaw)
+  const A2=(await Promise.all([1,2].map(seed=>callAI(prompt,L.map(p=>p.aiBlob),signal,{seed}).then(r=>{const a=Array.isArray(r)?r:(r&&Array.isArray(r.images)?r.images:[]);return a.length===L.length?a:null;},e=>{if(e&&e.code==="cancelled")throw e;console.warn(e);return null;})))).filter(Boolean);
+  if(!A2.length)return false;
   const yes=v=>v===true||/^(true|yes)$/i.test(String(v));
-  const sc=L.map((p,i)=>{const o=arr.find(q=>+q.n===i+1)||arr[i]||{};let s=0;
-    if(/other/i.test(String(o.view||"")))return {p,s:0,q:0,not:true};
+  const score=(arr,i)=>{const o=arr.find(q=>+q.n===i+1)||arr[i]||{};let s=0;
+    if(/other/i.test(String(o.view||"")))return {s:0,q:0,not:true};
     const m=String(o.middle||"").toLowerCase();if(/palate/.test(m))s+=2.5;else if(/tongue|floor/.test(m))s-=2.5;
     if(yes(o.rugae))s+=1.5;if(yes(o.papilla))s+=1;if(yes(o.frenum))s-=1.5;
     const inc=String(o.incisors||"").toLowerCase();if(/broad/.test(inc))s+=.7;else if(/narrow/.test(inc))s-=.7;
-    return {p,s,q:Math.max(0,Math.min(10,+o.quality||5))};});
+    return {s,q:Math.max(0,Math.min(10,+o.quality||5))};};
+  const sc=L.map((p,i)=>{const R=A2.map(a=>score(a,i)),ok=R.filter(x=>!x.not);
+    if(!ok.length)return {p,s:0,q:0,not:true};
+    return {p,s:ok.reduce((a,x)=>a+x.s,0)/ok.length,q:ok.reduce((a,x)=>a+x.q,0)/ok.length};});
   // a set normally has one of each: when every photo leans the same way, the weakest one is the other jaw
   const occ=sc.filter(x=>!x.not&&x.s);
   if(occ.length>=2&&(occ.every(x=>x.s>0)||occ.every(x=>x.s<0))){const w=occ.slice().sort((a,b)=>Math.abs(a.s)-Math.abs(b.s))[0];if(Math.abs(w.s)<1.5)w.s=-Math.sign(w.s)||-1;}
