@@ -3778,7 +3778,7 @@ async function openOccZoom(s){
   let selLine=null,picked=false;
   // points of a tooth the analysis could not find (molar / canine) are shown here so they can be placed by hand; moving one
   // brings that relation back. Only a tooth deleted by hand stays hidden
-  const zHide=()=>{const k=p.occl.skip||{},en=p.occl.skipEn||{};return [...(k.canine&&!en.canine?["u3","l34"]:[]),...(k.molar&&!en.molar?["u6","l6g"]:[])];};
+  const zHide=()=>{const k=p.occl.skip||{},en=p.occl.skipEn||{};return [...(k.canine&&!en.canine?["u3","l34"]:[]),...(k.molar&&!en.molar?["u6","l6g"]:[])];};   // hidden only when deleted with the delete button / key
   const wake=kk=>{const gk=["u3","l34"].includes(kk)?"canine":["u6","l6g"].includes(kk)?"molar":null;
     if(gk&&p.occl.skip&&p.occl.skip[gk]&&p.occl.skipEn&&p.occl.skipEn[gk]){p.occl.skip=Object.assign({},p.occl.skip,{[gk]:false});delete p.occl.skipEn[gk];
       if(p.occl.why)p.occl.why=p.occl.why.filter(t=>!(gk==="molar"?/الرحى/:/الناب/).test(t));}};
@@ -6012,7 +6012,7 @@ $("genBtn").onclick=async()=>{try{syncName();}catch(_){}
         // slides 6 and 7: the horizontal guide lines are for the program only - not in the file
         if(list.some(s=>s.k===6||s.k===7||s.k===8)){removeAutoLines(doc,new Set(["Head top line","Eye line","Chin line","Ear top line","Ear bottom line"]));removeTemplateLines(doc,"h");}
         if(list.some(s=>s.k===7))removeTemplateLines(doc,"v");   // slide 7: no vertical line either
-        else if(!list.some(s=>s.k===6||s.k===8))addProfileGuides(doc,list);   // slides 6 and 8: no horizontal lines in the file
+        else if(list.some(s=>s.k===9))removeAutoLines(doc,new Set(["Head top line","Eye line","Chin line","Ear top line","Ear bottom line"]));else if(!list.some(s=>s.k===6||s.k===8))addProfileGuides(doc,list);   // slides 6, 8 and 9: no horizontal lines in the file
       }
       if($("fitLines").checked)fitEyeGuideLine(doc,list);
       fitIntraoralMidline(doc,list);
