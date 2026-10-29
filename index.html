@@ -2753,7 +2753,12 @@ async function measureTemplateFaces(zip){
   try{const refs={};for(const s of face)refs[s.id]=s.ref||null;localStorage.setItem("cp_tplrefs",JSON.stringify({key:tplRefKey,refs}));}catch(_){}
   return{ok:true,done,total:face.length};
 }
-function facialMidOff(){for(const s of slots){const a=assign[s.id];if(s.n===2&&a&&a.lines&&a.lines.midOff!=null)return a.lines.midOff;}return 0;}
+// where the facial midline crosses the nose (share of the nose width from the nose centre), used to put the midline on the
+// frontal intraoral photo (slide 12). Taken from the vertical line of the FULL SMILE photo on slide 4 (the teeth show
+// there, the line can be moved by hand); slide 2 is used only when slide 4 has no full smile line
+function facialMidOff(){
+  for(const s of slots){const a=assign[s.id];if(s.n===4&&s.cat==="frontal_emotional"&&a&&a.photoId&&a.fmid!=null&&a.fNose&&a.fNose.w>.005)return (a.fmid-a.fNose.c)/a.fNose.w;}
+  for(const s of slots){const a=assign[s.id];if(s.n===2&&a&&a.lines&&a.lines.midOff!=null)return a.lines.midOff;}return 0;}
 /* occlusal (mirror) photo: find the dental arch - bright, lightly coloured enamel - keep the blobs
    not cut by the top/bottom photo edge (teeth of the other jaw outside the mirror), then find the
    tilt and the symmetry axis of the U and which end holds the incisors. Returns fractions of the
@@ -3200,7 +3205,7 @@ let caseChart=null;   // {miss:Set of FDI, dec:Set of FDI (deciduous still prese
 const Q_TEETH=q=>[1,2,3,4,5,6,7].map(i=>q*10+i);
 const TOOTH_NAME={1:"central incisor",2:"lateral incisor",3:"canine",4:"first premolar",5:"second premolar",6:"first molar",7:"second molar"};
 /* the tooth chart belongs to the photos it was made from: other intraoral photos (a new patient) -> no chart */
-function chartSig(){return ["occ_upper","occ_lower","io_frontal","io_right","io_left"].map(c=>{const s=slots.find(t=>t.cat===c&&!t.video&&assign[t.id]&&assign[t.id].photoId);return s?assign[s.id].photoId:"";}).join("|");}
+function chartSig(){return ["occ_upper","occ_lower","io_frontal"].map(c=>{const s=slots.find(t=>t.cat===c&&!t.video&&assign[t.id]&&assign[t.id].photoId);return s?assign[s.id].photoId:"";}).join("|");}
 function checkChart(){if(caseChart&&caseChart.sig!==chartSig())caseChart=null;return caseChart;}
 function chartSide(side){
   checkChart();   // side "right"/"left" -> {up:[...present FDI front->back], lo:[...], nPremLo}
@@ -3234,29 +3239,32 @@ const TOOTH_MORPHOLOGY=`HOW TO RECOGNISE EACH TOOTH BY ITS SHAPE (never by count
 - Deciduous teeth (51-85): smaller, whiter, bulbous crowns narrowing at the neck; deciduous molars sit where the premolars will be.
 COMMON ANOMALIES (Iraqi studies: the most often congenitally missing teeth are the upper lateral incisors, then the lower second premolars, then the lower incisors): with missing upper laterals the canine stands RIGHT NEXT TO the central incisor and a premolar stands where the canine should be; a missing / extracted premolar leaves only one premolar between canine and first molar (gap or closed space); a missing lower first molar leaves a gap or a tipped second molar; retained deciduous teeth; impacted canines (bulge in the gum, no canine in the arch).`;
 async function aiToothChart(signal){
-  // the chart is read from the two OCCLUSAL photos (upper and lower arch): every tooth by its shape and by its place in the
-  // row; the frontal and side photos only CHECK that reading and tell the patient's right from left (tested: the occlusal
-  // photos alone missed absent lateral incisors that the frontal photo shows plainly)
-  const want=[["occ_upper","OCCLUSAL photo of the UPPER arch (mirror photo) - MAIN source"],["occ_lower","OCCLUSAL photo of the LOWER arch (mirror photo) - MAIN source"],["io_frontal","FRONTAL intraoral photo, teeth together (patient's right on the image left) - to CHECK the reading and the sides"],["io_right","BUCCAL photo of the patient's RIGHT side - to CHECK"],["io_left","BUCCAL photo of the patient's LEFT side - to CHECK"]];
+  // the chart is read ONLY from the two OCCLUSAL photos (upper and lower arch): every tooth by its shape and by its place
+  // in the row; the frontal photo only tells the patient's right from left (tested on a real case confirmed by the doctor:
+  // with the frontal and side photos counted too, lateral incisors hidden behind brackets were wrongly called missing)
+  const want=[["occ_upper","OCCLUSAL photo of the UPPER arch (mirror photo)"],["occ_lower","OCCLUSAL photo of the LOWER arch (mirror photo)"],["io_frontal","FRONTAL intraoral photo, teeth together (patient's right on the image left) - ONLY to tell the patient's right from left; do NOT count or name teeth on it (brackets hide small teeth there)"]];
   const L=[];for(const [c,d] of want){const s=slots.find(t=>t.cat===c&&!t.video&&assign[t.id]&&assign[t.id].photoId);const p=s&&photos.find(x=>x.id===assign[s.id].photoId);if(p&&!L.some(x=>x.p===p))L.push({p,d,c});}
   if(!L.some(x=>x.c==="occ_upper")||!L.some(x=>x.c==="occ_lower"))return false;   // both arch photos are needed
   if(checkChart()&&caseChart.man)return false;   // a chart corrected by hand (for these same photos) is kept
   const prompt=`These ${L.length} images are the intraoral photos of ONE orthodontic patient:
 ${L.map((x,i)=>`- image ${i+1}: ${x.d}`).join("\n")}
 Make an exact TOOTH CHART (FDI numbering: 11-17 upper right, 21-27 upper left, 31-37 lower left, 41-47 lower right; deciduous 51-85; third molars ignored).
-Read the chart from the two OCCLUSAL photos (upper arch and lower arch), tooth by tooth:
+Read the chart ONLY from the two OCCLUSAL photos (upper arch and lower arch), tooth by tooth:
 1. Find the midline between the two central incisors of each arch.
 2. For each quadrant go from the midline backwards along the arch and name EVERY tooth by its SHAPE (central incisor, lateral incisor, canine, first premolar, second premolar, first molar, second molar) - the SEQUENCE of shapes tells which tooth is which: e.g. a pointed canine standing right next to the central incisor means the lateral incisor of that side is missing; one premolar between canine and first molar means one premolar is missing.
 3. Compare the two sides of the same arch and the two arches with each other (same number of premolars? a lateral incisor on one side only?).
 4. A gap, a tooth standing out of the row, or a tooth whose shape does not fit its place tells you which tooth is missing; a small tooth with a short wide crown in the permanent row may be a deciduous tooth.
-5. Then CHECK the same sequence on the frontal and the side photos: the teeth between the central incisor and the first molar must be the same teeth on every photo (on the frontal photo look at what stands right next to each central incisor: a narrow lateral incisor, or already the pointed canine). Where the photos disagree, look again at that place. The frontal photo also tells which side of the mirror pictures is the patient's right.
+5. Count the teeth of each quadrant from the central incisor to the last molar: 7 teeth (central, lateral, canine, 2 premolars, 2 molars) means none is missing; call a tooth missing only when that count is short or a gap / wrong shape shows exactly which one. Front teeth (incisors, canine) are often stained or worn alike; premolars have two cusps.
+Use the frontal photo only to decide which side of the mirror pictures is the patient's right and which is the left.
 ${TOOTH_MORPHOLOGY}
 Reply with only JSON: {"quadrants":{"UR":[11,12,13,14,15,16,17],"UL":[21,22,23,24,25,26,27],"LL":[31,32,33,34,35,36,37],"LR":[41,42,43,44,45,46,47]},"missing":[],"deciduous":[],"notes":"short notes in English: anomalies, which tooth stands in which place, braces","conf":0.8}`;
   const ok=t=>Number.isInteger(+t)&&+t%10>=1&&+t%10<=7&&[1,2,3,4].includes(Math.floor(+t/10));
   const pos=t=>{t=+t;return t>50&&t<86?(Math.floor(t/10)-4)*10+t%10:t;};   // deciduous -> the place it holds
   // read 3 times with fixed seeds and keep what the majority says (the same photos give the same chart)
   const reads=[];let lastErr=null;
-  const ask=seed=>callAI(prompt,L.map(x=>x.p.aiBlob),signal,{seed}).then(r=>({r}),e=>({e}));
+  // sharper pictures than the sorting ones (1600 px): small teeth and their shapes are read better
+  const BL=await Promise.all(L.map(async x=>{try{const full=await createImageBitmap(x.p.file,{imageOrientation:"from-image"});const b=await canvasBlob(scaledCanvas(full,1600),"image/jpeg",.9);full.close&&full.close();return b;}catch(_){return x.p.aiBlob;}}));
+  const ask=seed=>callAI(prompt,BL,signal,{seed}).then(r=>({r}),e=>({e}));
   const pre=[ask(7),ask(17)];   // the first two readings at the same time; the third only when they disagree
   for(const seed of [7,17,27]){
     try{const qq=await (seed===7?pre[0]:seed===17?pre[1]:ask(27));if(qq.e)throw qq.e;const r=qq.r;if(!r||typeof r!=="object")continue;
@@ -3887,7 +3895,7 @@ async function openZoomView(s,pic,title){
   function vMove(n){VL.x=Math.max(0,Math.min(1,VL.x+n*.0025));draw();}
   const saveV=()=>{if(!VL||Math.abs(VL.x-VX0)<1e-6)return false;
     if(VL.k==="mid"){HA.lines=Object.assign({},HA.lines,{mid:VL.x});HA.linesMan=true;}
-    else if(VL.k==="fmid"){VA.fmid=VL.x;VA.fmidMan=true;}
+    else if(VL.k==="fmid"){VA.fmid=VL.x;VA.fmidMan=true;setTimeout(()=>{try{scheduleAlign();}catch(_){}},0);}   // slide 12 follows the full smile line
     else if(VL.k==="io"){VA.ioMid=VL.x;}
     else{VA.prof=Object.assign({},VA.prof,{x:VL.x});VA.profMan=true;}
     return true;};
@@ -5148,7 +5156,10 @@ async function scheduleAlign(){
           let full=null;try{full=await createImageBitmap(p.file,{imageOrientation:"from-image"});}catch(_){}
           const D=renderDisplayed(full||p.prev,{rot:a.rot,flip:a.flip,align:effAlign(a),bg:p.bg,zoom:a.zoom,tilt:a.tilt,level:a.eyeLevel,dx:a.dx,dy:a.dy,nudged:!!(a.dx||a.dy||(a.zoom&&a.zoom!==1))},W,H);
           if(full&&full.close)full.close();
-          a.fmid=await measureOuterMid(D);a.fmidMan=false;a.fmidTd=a.align.td;a.fmidKey=a.alignKey;
+          const off0=facialMidOff();measureOuterMid.nose=null;
+          a.fmid=await measureOuterMid(D);a.fNose=a.fmid!=null?measureOuterMid.nose:null;a.fmidMan=false;a.fmidTd=a.align.td;a.fmidKey=a.alignKey;
+          // the full smile line moved: the slide 12 midline follows
+          if(Math.abs(facialMidOff()-off0)>1e-4&&slots.some(t=>t.cat==="io_frontal"&&assign[t.id]&&assign[t.id].photoId))alignAgain=true;
         }
         for(const s of slots){
           const a=assign[s.id];
@@ -5299,6 +5310,8 @@ async function measureOuterMid(canvas){
   if(!(await initFace()))return null;
   const det=await faceapi.detectSingleFace(canvas,new faceapi.SsdMobilenetv1Options({minConfidence:.3})).withFaceLandmarks();
   if(!det)return null;const P=det.landmarks.positions;
+  // the nose (centre and width, in shares of the picture width) is kept for the slide 12 midline (see facialMidOff)
+  measureOuterMid.nose={c:(P[31].x+P[35].x)/2/canvas.width,w:Math.abs(P[35].x-P[31].x)/canvas.width};
   return (P[36].x+P[45].x)/2/canvas.width;
 }
 /* the template's own straight lines of one direction ("v": vertical, "h": horizontal), except the named ones */
