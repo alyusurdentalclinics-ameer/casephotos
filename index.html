@@ -1363,9 +1363,11 @@ async function apAct(id,name,act){
   if(act==="del"){if(!confirm("حذف هذا الملف من الأرشيف؟ (يروح لسلة مهملات Drive)"))return;
     try{await archCall("delete",{id});toast("حُذف.");await archNames();await apLoadIndex(true);apSearch();}catch(e){apMsg(e.message,true);}return;}
   if(act==="state"){if(photos.length&&!confirm("ترجع لهذه الحالة من الأرشيف؟ الحالة الحالية تنحفظ بهذا الجهاز أولاً."))return;
-    if(photos.length)try{await stSaveLocal("قبل الاسترجاع من الأرشيف");}catch(_){}
+    // the current case is saved on this device in the background (its picture of the case is taken at once) - the download
+    // starts straight away instead of waiting for that save
+    if(photos.length)try{stSaveLocal("قبل الاسترجاع من الأرشيف").catch(e=>console.warn(e));}catch(_){}
     ARCH.busy=true;apMsg("جارٍ تنزيل حالة البرنامج من الأرشيف…");let f=null;
-    try{f=await archDownload(id,opt);}catch(e){apMsg("تعذّر: "+e.message,true);}finally{ARCH.busy=false;setBar("apBar",null);}
+    try{f=await archDownload(id,Object.assign({par:6},opt));}catch(e){apMsg("تعذّر: "+e.message,true);}finally{ARCH.busy=false;setBar("apBar",null);}
     if(f){apClose();stGuard(async()=>{await archRestoreState(f);});}return;}
   if(act==="dl"){ARCH.busy=true;apMsg("جارٍ تنزيل الملف…");
     try{const f=await archDownload(id,opt);await saveFile(f.name,f.blob);apMsg("✓ نُزّل: "+f.name);}
@@ -1702,12 +1704,12 @@ $("stFile").onclick=()=>stGuard(async()=>{stMsg("جارٍ تجهيز ملف ال
   const a=document.createElement("a");a.href=URL.createObjectURL(z);a.download=nm.replace(/[\\/:*?"<>|]+/g,"_");document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);
   stMsg(`✓ نُزّل ملف الحالة (${(z.size/1048576).toFixed(1)} MB).`);});
 $("stOpen").addEventListener("change",e=>{const f=e.target.files[0];e.target.value="";if(!f)return;
-  stGuard(async()=>{if(photos.length)await stSaveLocal("قبل فتح ملف حالة");stMsg("جارٍ قراءة ملف الحالة…");const {st,getFile}=await stReadZip(f);stDoneMsg(await stRestore(st,getFile),"من الملف");});});
+  stGuard(async()=>{if(photos.length)stSaveLocal("قبل فتح ملف حالة").catch(e=>console.warn(e));stMsg("جارٍ قراءة ملف الحالة…");const {st,getFile}=await stReadZip(f);stDoneMsg(await stRestore(st,getFile),"من الملف");});});
 $("stList").onchange=stButtons;
 $("stBack").onclick=()=>stGuard(async()=>{const at=$("stList").value;if(!at)return;
   const rec=await stTx("readonly",os=>os.get(at));if(!rec)throw new Error("الحالة غير موجودة.");
   if(photos.length&&!confirm("ترجع لهذه الحالة؟ الحالة الحالية تنحفظ أولاً حتى تقدر ترجع لها."))return;
-  if(photos.length)await stSaveLocal("قبل الرجوع");
+  if(photos.length)stSaveLocal("قبل الرجوع").catch(e=>console.warn(e));   // in the background (the case is copied at once)
   const byId=new Map((rec.files||[]).map(x=>[x.id,x]));
   stDoneMsg(await stRestore(stParse(rec.json),async sp=>{const x=byId.get(sp.id);if(!x)return null;const f=x.file;if(x.ai&&f)try{f.__ai=x.ai;}catch(_){}return f;}),"من هذا الجهاز");});
 stRenderList().then(stButtons);
@@ -3811,7 +3813,7 @@ async function openOccZoom(s){
         g.setLineDash([]);g.lineWidth=3;g.strokeStyle="rgba(0,0,0,.6)";g.strokeText(t,x0+3,y0-2);g.fillStyle=+t<30?"#FFD800":"#20D0F0";g.fillText(t,x0+3,y0-2);}
       g.restore();}
     const F={};for(const k of OCC_KEYS)F[k]=toScr(S[k][0],S[k][1]);drawOcc(g,F,{lw:2,r:10,sel,labels:true,fs:14,off:occOff(p),hideKeys:zHide(),selLine});
-    {const k=p.occl.skip||{},bc=ov.querySelector("[data-z=pc]"),bm=ov.querySelector("[data-z=pm]");bc.textContent=k.canine?"↩ إرجاع الناب":"🗑 حذف الناب (النقاط والخطوط)";bm.textContent=k.molar?"↩ إرجاع الرحى":"🗑 حذف الرحى (النقاط والخطوط)";}
+    {const k=p.occl.skip||{},bc=ov.querySelector("[data-z=pc]"),bm=ov.querySelector("[data-z=pm]");const en=p.occl.skipEn||{};bc.textContent=k.canine&&!en.canine?"↩ إرجاع الناب":"🗑 حذف الناب (النقاط والخطوط)";bm.textContent=k.molar&&!en.molar?"↩ إرجاع الرحى":"🗑 حذف الرحى (النقاط والخطوط)";}
     const dl=ov.querySelector("[data-z=del]");dl.disabled=!selLine;dl.textContent=selLine?"🗑 حذف: "+OCC_LINE_NAMES[selLine]:"🗑 حذف الخط المحدد";
     ov.querySelector("[data-z=all]").hidden=!(p.occl.off&&p.occl.off.length);
     writeBack();const T=occLines(p,a);ov.querySelector(".res").textContent=T?T.join("   ·   "):"";};
@@ -3845,7 +3847,7 @@ async function openOccZoom(s){
     else if(v==="all"){p.occl.off=[];draw();}
     else if(v==="redo"){if(!aiReady()){toast(`أدخل مفتاح ${PROVIDERS[curProv()].name} أولًا.`);return;}close(false);toast("⏳ جارٍ إعادة التحليل…");
       aiOcclusion(p,new AbortController().signal).then(()=>{renderSlides();openOccZoom(s);}).catch(e=>{toast(aiErrorText(e));renderSlides();});}
-    else if(v==="pc"||v==="pm"){const k=v==="pc"?"canine":"molar",on=!(p.occl.skip&&p.occl.skip[k]);p.occl.skip=Object.assign({},p.occl.skip,{[k]:on});
+    else if(v==="pc"||v==="pm"){const k=v==="pc"?"canine":"molar",on=!(p.occl.skip&&p.occl.skip[k])||!!(p.occl.skipEn&&p.occl.skipEn[k]);/* a tooth the analysis skipped is shown: the button deletes it */p.occl.skip=Object.assign({},p.occl.skip,{[k]:on});
       if(!on&&p.occl.off){const ids=k==="canine"?["u3","l34","cbar"]:["u6","l6g","mbar"];p.occl.off=p.occl.off.filter(x=>!ids.includes(x));}if(p.occl.skipEn)delete p.occl.skipEn[k];if(p.occl.why)p.occl.why=p.occl.why.filter(t=>!(k==="molar"?/الرحى/:/الناب/).test(t));selLine=null;draw();}
     else close(v==="ok");});
   draw();
