@@ -1160,14 +1160,34 @@ function archThumb(){
 async function archUpload(blob,meta){
   try{AP.index=null;AP.idxP=null;}catch(_){}
   if(meta&&meta.patient!=="__template__"&&!meta.info){meta=Object.assign({info:piInfo(),thumb:archThumb()},meta);}
-  const b=await archCall("begin",Object.assign({size:blob.size},meta));
-  const CH=b.chunk||4*1024*1024,n=Math.max(1,Math.ceil(blob.size/CH)),bar=!(meta&&meta.noBar);   // the server's part size (Drive needs 256 KB multiples)
+  const bar=!(meta&&meta.noBar),M=Object.assign({},meta);delete M.noBar;delete M.onPart;
+  // fastest: the page sends the file straight to Google Drive in one go (no base64, no detour through the server); a
+  // server or a browser that does not allow it falls back to the parts through the server
+  if(!archUpload.noDirect){
+    const b=await archCall("begin",Object.assign({size:blob.size,origin:location.origin},M));
+    if(b.loc){
+      const id=await new Promise(res=>{const x=new XMLHttpRequest();x.open("PUT",b.loc);
+        x.upload.onprogress=e=>{if(bar&&e.lengthComputable)setBar("archBar",e.loaded/e.total*.97);if(meta&&meta.onPart)try{meta.onPart(e.loaded,e.total);}catch(_){}};
+        x.onload=()=>{let j=null;try{j=JSON.parse(x.responseText);}catch(_){}res((x.status===200||x.status===201)&&j&&j.id?j.id:null);};
+        x.onerror=()=>res(null);x.ontimeout=()=>res(null);x.send(blob);});
+      if(id){await archCall("direct",{uploadId:b.uploadId,fileId:id});const f=await archCall("finish",{uploadId:b.uploadId});if(bar)setBar("archBar",null);
+        try{AP.index=null;AP.idxP=null;AP.idxAt=0;}catch(_){}return f;}
+      archUpload.noDirect=true;console.warn("direct upload refused - parts through the server");
+    }
+    else archUpload.noDirect=true;   // an older server (no direct upload): the parts, below
+    // a new session for the parts (the direct one may hold a few bytes already)
+  }
+  const b=await archCall("begin",Object.assign({size:blob.size},M));
+  const CH=b.chunk||4*1024*1024,n=Math.max(1,Math.ceil(blob.size/CH));   // the server's part size (Drive needs 256 KB multiples)
   // the parts must go in order (Drive resumable upload); the next part is prepared while the current one travels
   const prep=i=>blobToDataUrl(blob.slice(i*CH,(i+1)*CH)).then(d=>d.slice(d.indexOf(",")+1));
   let nx=prep(0);
   for(let i=0;i<n;i++){const d=await nx;if(i+1<n)nx=prep(i+1);await archCall("chunk",{uploadId:b.uploadId,i,data:d});if(bar)setBar("archBar",(i+1)/(n+1));
     if(meta&&meta.onPart)try{meta.onPart(i+1,n);}catch(_){}}
-  const f=await archCall("finish",{uploadId:b.uploadId});if(bar)setBar("archBar",null);return f;
+  const f=await archCall("finish",{uploadId:b.uploadId});if(bar)setBar("archBar",null);
+  // the archive list read while this file was still going up does not have it: read it again next time
+  try{AP.index=null;AP.idxP=null;AP.idxAt=0;}catch(_){}
+  return f;
 }
 async function archDownload(id,opt){
   const PDF=!!(opt&&opt.pdf),BAR=(opt&&opt.bar)||"archBar",MSG=(opt&&opt.msg)||archMsg;
@@ -1263,7 +1283,7 @@ const apFmt=d=>{const t=new Date(d);return isNaN(t)?String(d):t.toLocaleString("
 AP.index=null;AP.full=new Map();AP.seq=0;
 async function apLoadIndex(force){
   if(AP.index&&!force)return AP.index;
-  if(!AP.idxP||force)AP.idxP=archCall("list",{q:""}).then(j=>{AP.index=j.cases;return AP.index;}).catch(e=>{AP.idxP=null;throw e;});
+  if(!AP.idxP||force)AP.idxP=archCall("list",{q:""}).then(j=>{AP.index=j.cases;AP.idxAt=Date.now();return AP.index;}).catch(e=>{AP.idxP=null;throw e;});
   return AP.idxP;
 }
 function apRender(cases){
@@ -1288,8 +1308,11 @@ async function apSearch(fetchFull){
   const q=$("apQ").value.trim();if(!ARCH.user)return;apViewClose();const seq=++AP.seq;
   try{
     if(!AP.index)apMsg("جارٍ البحث…");
-    const idx=await apLoadIndex();if(seq!==AP.seq)return;
+    let idx=await apLoadIndex();if(seq!==AP.seq)return;
     const k=key(q),hit=c=>!k||key(c.patient).includes(k);
+    // nothing found in a list read more than a few seconds ago: the list is read again from the platform (a case saved a
+    // moment ago, or from another device, is then found)
+    if(k&&!idx.some(hit)&&Date.now()-(AP.idxAt||0)>3000){apMsg("جارٍ البحث…");idx=await apLoadIndex(true);if(seq!==AP.seq)return;}
     let cases=idx.filter(hit).slice(0,60).map(c=>Object.assign({},c,AP.full.get(c.id)||{}));
     if(!cases.length){$("apList").innerHTML="";apMsg("لا توجد ملفات بهذا الاسم.");return;}
     apMsg("");apRender(cases);
