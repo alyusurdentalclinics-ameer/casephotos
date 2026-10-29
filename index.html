@@ -1045,17 +1045,45 @@ $("photoInput").addEventListener("change",async e=>{
   }
   setBar("photoBar",null);renderAll();
 });
+/* size of a JPEG photo as it is shown (EXIF orientation applied) read from its header - no decoding; null if unknown */
+async function jpegSize(f){
+  try{const b=new Uint8Array(await f.slice(0,Math.min(f.size,262144)).arrayBuffer());if(b[0]!==0xFF||b[1]!==0xD8)return null;
+    let i=2,ori=1,W=0,H=0;
+    while(i+9<b.length){if(b[i]!==0xFF){i++;continue;}const m=b[i+1],len=(b[i+2]<<8)|b[i+3];
+      if(m===0xE1&&b[i+4]===0x45&&b[i+5]===0x78&&b[i+6]===0x69&&b[i+7]===0x66){   // Exif: orientation tag 0x0112
+        const o=i+10,le=b[o]===0x49,r16=k=>le?b[k]|(b[k+1]<<8):(b[k]<<8)|b[k+1],r32=k=>le?(b[k]|(b[k+1]<<8)|(b[k+2]<<16)|(b[k+3]<<24))>>>0:((b[k]<<24)|(b[k+1]<<16)|(b[k+2]<<8)|b[k+3])>>>0;
+        const ifd=o+r32(o+4),n=r16(ifd);for(let e=0;e<n;e++){const q=ifd+2+e*12;if(q+10>b.length)break;if(r16(q)===0x0112){ori=r16(q+8);break;}}}
+      if(m>=0xC0&&m<=0xCF&&m!==0xC4&&m!==0xC8&&m!==0xCC){H=(b[i+5]<<8)|b[i+6];W=(b[i+7]<<8)|b[i+8];break;}
+      i+=2+len;}
+    if(!W||!H)return null;return ori>=5&&ori<=8?{w:H,h:W}:{w:W,h:H};}catch(_){return null;}
+}
+/* the photo decoded at most "long" px on its long side (faster than the full 24 megapixels where a smaller picture is made) */
+async function decodeAt(p,long){
+  if(p&&p.w&&p.h&&Math.max(p.w,p.h)>long*1.05){const k=long/Math.max(p.w,p.h);
+    try{return await createImageBitmap(p.file,{imageOrientation:"from-image",resizeWidth:Math.max(1,Math.round(p.w*k)),resizeHeight:Math.max(1,Math.round(p.h*k)),resizeQuality:"high"});}catch(_){}}
+  return createImageBitmap(p.file,{imageOrientation:"from-image"});
+}
 async function importFile(f){
   const isVideo=f.type.startsWith("video/")||/\.(mp4|mov|m4v)$/i.test(f.name);
-  let full;
+  let full,W=0,H=0;
   if(isVideo) full=await videoFrame(f);
-  else full=await createImageBitmap(f,{imageOrientation:"from-image"});
-  const prev=scaledCanvas(full,700);
-  const bg=sampleBg(prev);
+  else{
+    // faster: a JPEG is decoded straight at the working size (1100 px, the largest picture made here) instead of its full
+    // 24 megapixels; the full size is read from the file header (the full photo is still used for the slides)
+    const sz=/jpe?g$/i.test(f.type||"")||/\.jpe?g$/i.test(f.name||"")?await jpegSize(f):null;
+    if(sz&&Math.max(sz.w,sz.h)>1400){const k=1100/Math.max(sz.w,sz.h);
+      // only the width is given: the browser keeps the true proportions; a header read the wrong way round shows in the result
+      try{full=await createImageBitmap(f,{imageOrientation:"from-image",resizeWidth:Math.max(1,Math.round(sz.w*k)),resizeQuality:"high"});
+        const ar=full.width/full.height;W=Math.abs(ar-sz.w/sz.h)<.02*ar?sz.w:sz.h;H=W===sz.w?sz.h:sz.w;if(W===sz.h&&Math.abs(ar-sz.h/sz.w)>.02*ar){full.close&&full.close();full=null;}}catch(_){full=null;}}
+    if(!full){full=await createImageBitmap(f,{imageOrientation:"from-image"});W=full.width;H=full.height;}
+  }
+  if(isVideo){W=full.width;H=full.height;}
   const ai=scaledCanvas(full,1100);
-  const aiBlob=await canvasBlob(ai,"image/jpeg",.82);
-  const thumbUrl=URL.createObjectURL(await canvasBlob(scaledCanvas(full,320),"image/jpeg",.8));
-  const p={id:"p"+(++photoSeq),file:f,name:f.name,video:isVideo,prev,bg,faceCache:{},aiBlob,thumbUrl,w:full.width,h:full.height,cat:null,conf:0,rot:0,why:""};
+  const prev=scaledCanvas(ai,700);
+  const bg=sampleBg(prev);
+  const [aiBlob,thB]=await Promise.all([canvasBlob(ai,"image/jpeg",.82),canvasBlob(scaledCanvas(prev,320),"image/jpeg",.8)]);
+  const thumbUrl=URL.createObjectURL(thB);
+  const p={id:"p"+(++photoSeq),file:f,name:f.name,video:isVideo,prev,bg,faceCache:{},aiBlob,thumbUrl,w:W,h:H,cat:null,conf:0,rot:0,why:""};
   if(isVideo)p.frame=full;else full.close&&full.close();
   return p;
 }
@@ -1541,7 +1569,7 @@ async function piFill(zip){
 if(!$("piDate").value)$("piDate").value=piTodayStr();
 
 const STATE_FIELDS=["cvSNA","cnSNA","cvSNB","cnSNB","cvANB","cnANB","cvMMPA","cnMMPA","cvUIMX","cnUIMX","cvLIMN","cnLIMN","oaUM","oaUR","oaUC","oaLM","oaLR","oaLC","outName","piName","piGender","piAge","piEdu","piAddr","piRef","piSys","piBy","piCC","piDate","closeup","evenFrames","whiteBg","levelBrows","fitLines","alignFaces","faceScale","dropEmpty","blankEmpty"];
-const P_SKIP=new Set(["file","prev","bg","faceCache","aiBlob","thumbUrl","frame","_wbm","occlBusy","ojBusy","ojAutoTried","occlAutoTried","w","h","video"]);
+const P_SKIP=new Set(["file","prev","bg","aiBlob","thumbUrl","frame","_wbm","occlBusy","ojBusy","ojAutoTried","occlAutoTried","w","h","video"]);
 const ST_KEEP=4, STATE_MIME="application/zip";
 function stStringify(v){
   return JSON.stringify(v,(k,x)=>{
@@ -1613,11 +1641,14 @@ async function stRestore(st,getFile){cephPid=null;
   if(!st||!Array.isArray(st.photos))throw new Error("ملف الحالة غير صالح.");
   if(!tpl){if(ARCH.user&&ARCH.tplInfo){stMsg("جارٍ تحميل قالب المنصة أولاً…");await archLoadTemplate(true);}
     if(!tpl)throw new Error("حمّل القالب أولاً (الخطوة ١) ثم استرجع الحالة.");}
-  const out=[];let i=0;
-  for(const sp of st.photos){stMsg(`جارٍ استرجاع الصورة ${arNum(++i)} من ${arNum(st.photos.length)}…`);
+  // the photos are read 4 at a time (the decoding runs off the page), the order is kept
+  const res=new Array(st.photos.length);let i=0,nx=0;
+  await Promise.all(Array.from({length:Math.min(4,st.photos.length)},async()=>{while(nx<st.photos.length){const j=nx++,sp=st.photos[j];
     try{const f=await getFile(sp);if(!f)continue;const p=await importFile(f);const keep={w:p.w,h:p.h,video:p.video};
-      Object.assign(p,sp,keep);p.file=f;p.occlBusy=false;p.ojBusy=false;out.push(p);}
-    catch(e){console.warn(e);}}
+      Object.assign(p,sp,keep);p.file=f;p.occlBusy=false;p.ojBusy=false;res[j]=p;}
+    catch(e){console.warn(e);}
+    stMsg(`جارٍ استرجاع الصور… ${arNum(++i)} من ${arNum(st.photos.length)}`);}}));
+  const out=res.filter(Boolean);
   photos.forEach(p=>{try{URL.revokeObjectURL(p.thumbUrl);}catch(_){}});
   photos=out;
   photoSeq=Math.max(photoSeq,+st.photoSeq||0,...photos.map(p=>+String(p.id).replace(/\D/g,"")||0));
@@ -3674,7 +3705,7 @@ async function aiOcclusion(p,signal){
 async function aiOcclusionCore(p,signal){
   const sl=slots.find(t=>isOccSlot(t)&&assign[t.id]&&assign[t.id].photoId===p.id),ctx=sl?chartText(sl.cat==="io_left"?"left":"right"):"";
   // a sharper picture than the one used for sorting the photos
-  let blob=p.aiBlob;try{const full=await createImageBitmap(p.file,{imageOrientation:"from-image"});blob=await canvasBlob(scaledCanvas(full,1600),"image/jpeg",.9);full.close&&full.close();}catch(_){}
+  let blob=p.aiBlob;try{const full=await decodeAt(p,1600);blob=await canvasBlob(scaledCanvas(full,1600),"image/jpeg",.9);full.close&&full.close();}catch(_){}
   const runs=[],fronts=[],mids=[];let lastErr=null;occBoxes.dec=new Set();aiOcclusion.why=null;
   // the three readings are asked at the same time (they do not depend on each other), then used in the same order
   const pre=[11,22,33].map(seed=>callAI(OCC_PROMPT(ctx),[blob],signal,{seed}).then(r=>({r}),e=>({e})));
@@ -3745,6 +3776,12 @@ async function openOccZoom(s){
   zoomHeaderLayout(ov);document.body.appendChild(ov);
   const cv=ov.querySelector("canvas"),g=cv.getContext("2d");
   let selLine=null,picked=false;
+  // points of a tooth the analysis could not find (molar / canine) are shown here so they can be placed by hand; moving one
+  // brings that relation back. Only a tooth deleted by hand stays hidden
+  const zHide=()=>{const k=p.occl.skip||{},en=p.occl.skipEn||{};return [...(k.canine&&!en.canine?["u3","l34"]:[]),...(k.molar&&!en.molar?["u6","l6g"]:[])];};
+  const wake=kk=>{const gk=["u3","l34"].includes(kk)?"canine":["u6","l6g"].includes(kk)?"molar":null;
+    if(gk&&p.occl.skip&&p.occl.skip[gk]&&p.occl.skipEn&&p.occl.skipEn[gk]){p.occl.skip=Object.assign({},p.occl.skip,{[gk]:false});delete p.occl.skipEn[gk];
+      if(p.occl.why)p.occl.why=p.occl.why.filter(t=>!(gk==="molar"?/الرحى/:/الناب/).test(t));}};
   const delLines=ids=>{const o=new Set(p.occl.off||[]);ids.forEach(i=>o.add(i));p.occl.off=[...o];selLine=null;draw();};
   const xs=OCC_KEYS.map(k=>S[k][0]*BW),ys=OCC_KEYS.map(k=>S[k][1]*BH);
   let vw=0,vh=0,z=1,cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2,sel="u3";
@@ -3762,7 +3799,7 @@ async function openOccZoom(s){
         const x0=Math.min(...c.map(q=>q[0])),y0=+t<30?Math.min(...c.map(q=>q[1])):Math.max(...c.map(q=>q[1]))+16;
         g.setLineDash([]);g.lineWidth=3;g.strokeStyle="rgba(0,0,0,.6)";g.strokeText(t,x0+3,y0-2);g.fillStyle=+t<30?"#FFD800":"#20D0F0";g.fillText(t,x0+3,y0-2);}
       g.restore();}
-    const F={};for(const k of OCC_KEYS)F[k]=toScr(S[k][0],S[k][1]);drawOcc(g,F,{lw:2,r:10,sel,labels:true,fs:14,off:occOff(p),hideKeys:occHideKeys(p),selLine});
+    const F={};for(const k of OCC_KEYS)F[k]=toScr(S[k][0],S[k][1]);drawOcc(g,F,{lw:2,r:10,sel,labels:true,fs:14,off:occOff(p),hideKeys:zHide(),selLine});
     {const k=p.occl.skip||{},bc=ov.querySelector("[data-z=pc]"),bm=ov.querySelector("[data-z=pm]");bc.textContent=k.canine?"↩ إرجاع الناب":"🗑 حذف الناب (النقاط والخطوط)";bm.textContent=k.molar?"↩ إرجاع الرحى":"🗑 حذف الرحى (النقاط والخطوط)";}
     const dl=ov.querySelector("[data-z=del]");dl.disabled=!selLine;dl.textContent=selLine?"🗑 حذف: "+OCC_LINE_NAMES[selLine]:"🗑 حذف الخط المحدد";
     ov.querySelector("[data-z=all]").hidden=!(p.occl.off&&p.occl.off.length);
@@ -3770,7 +3807,7 @@ async function openOccZoom(s){
   const zoomAt=(f,mx,my)=>{const[bx,by]=[(mx-vw/2)/z+cx,(my-vh/2)/z+cy];z=Math.max(zmin(),Math.min(14,z*f));cx=bx-(mx-vw/2)/z;cy=by-(my-vh/2)/z;draw();};
   let drag=null,last=null;
   cv.addEventListener("pointerdown",e=>{const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
-    let best=null,bd=1e9;const hk=occHideKeys(p);for(const k of OCC_KEYS){if(hk.includes(k))continue;const q=toScr(S[k][0],S[k][1]),d=Math.hypot(mx-q[0],my-q[1]);if(d<bd){bd=d;best=k;}}
+    let best=null,bd=1e9;const hk=zHide();for(const k of OCC_KEYS){if(hk.includes(k))continue;const q=toScr(S[k][0],S[k][1]),d=Math.hypot(mx-q[0],my-q[1]);if(d<bd){bd=d;best=k;}}
     if(bd>20){   // not on a point: a click on a line selects it (for deleting)
       const F={};for(const k of OCC_KEYS)F[k]=toScr(S[k][0],S[k][1]);const off=new Set(occOff(p));
       const dseg=(x,y,a,b)=>{const vx=b[0]-a[0],vy=b[1]-a[1],t=Math.max(0,Math.min(1,((x-a[0])*vx+(y-a[1])*vy)/((vx*vx+vy*vy)||1)));return Math.hypot(x-a[0]-t*vx,y-a[1]-t*vy);};
@@ -3778,7 +3815,7 @@ async function openOccZoom(s){
       if(hit){selLine=hit;draw();return;}selLine=null;}
     drag=bd<=20?best:"pan";if(drag!=="pan"){sel=drag;picked=true;}last=[mx,my];cv.setPointerCapture(e.pointerId);cv.style.cursor=drag==="pan"?"grabbing":"crosshair";draw();});
   cv.addEventListener("pointermove",e=>{if(!drag)return;const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
-    if(drag==="pan"){cx-=(mx-last[0])/z;cy-=(my-last[1])/z;}else{const q=toFr(mx,my);S[drag]=[Math.max(0,Math.min(1,q[0])),Math.max(0,Math.min(1,q[1]))];}
+    if(drag==="pan"){cx-=(mx-last[0])/z;cy-=(my-last[1])/z;}else{const q=toFr(mx,my);S[drag]=[Math.max(0,Math.min(1,q[0])),Math.max(0,Math.min(1,q[1]))];wake(drag);}
     last=[mx,my];draw();});
   const up=()=>{drag=null;cv.style.cursor="grab";};cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",up);
   cv.addEventListener("wheel",e=>{e.preventDefault();const r=cv.getBoundingClientRect();zoomAt(e.deltaY<0?1.15:1/1.15,e.clientX-r.left,e.clientY-r.top);},{passive:false});
@@ -3787,7 +3824,7 @@ async function openOccZoom(s){
     if((e.key==="Delete"||e.key==="Backspace")&&picked&&["u3","l34","u6","l6g"].includes(sel)){e.preventDefault();const k=["u3","l34"].includes(sel)?"canine":"molar";p.occl.skip=Object.assign({},p.occl.skip,{[k]:true});if(p.occl.skipEn)delete p.occl.skipEn[k];picked=false;draw();return;}
     if(e.key==="Tab"){e.preventDefault();sel=OCC_KEYS[(OCC_KEYS.indexOf(sel)+1)%OCC_KEYS.length];draw();return;}
     const st={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];if(!st)return;e.preventDefault();
-    const k=e.shiftKey?5:1;S[sel]=[Math.max(0,Math.min(1,S[sel][0]+st[0]*k/BW)),Math.max(0,Math.min(1,S[sel][1]+st[1]*k/BH))];draw();};
+    const k=e.shiftKey?5:1;S[sel]=[Math.max(0,Math.min(1,S[sel][0]+st[0]*k/BW)),Math.max(0,Math.min(1,S[sel][1]+st[1]*k/BH))];wake(sel);draw();};
   document.addEventListener("keydown",key);
   const onRs=()=>{fit();draw();};window.addEventListener("resize",onRs);
   const close=ok=>{document.removeEventListener("keydown",key);window.removeEventListener("resize",onRs);ov.remove();
@@ -4173,7 +4210,7 @@ const ojLSide=o=>{let ax=o.r2[0]-o.r1[0],ay=o.r2[1]-o.r1[1];const n=Math.hypot(a
 async function aiOverjet(p,kind,signal){
   p.ojBusy=true;p.ojFail=null;
   try{
-    let blob=p.aiBlob;try{const full=await createImageBitmap(p.file,{imageOrientation:"from-image"});blob=await canvasBlob(scaledCanvas(full,1600),"image/jpeg",.9);full.close&&full.close();}catch(_){}
+    let blob=p.aiBlob;try{const full=await decodeAt(p,1600);blob=await canvasBlob(scaledCanvas(full,1600),"image/jpeg",.9);full.close&&full.close();}catch(_){}
     const reads=[];
     const seeds=[5,15,25];let bad=0;
     const pre2=seeds.slice(0,2).map(seed=>callAI(OJ_PROMPT(kind),[blob],signal,{seed}).then(r=>({r}),e=>({e})));   // the first two readings at the same time
@@ -4470,7 +4507,7 @@ Reply with only JSON: {"S":[y,x],"N":[y,x],"A":[y,x],"B":[y,x],"ANS":[y,x],"PNS"
 async function aiCeph(p,signal){
   p.cephBusy=true;p.cephFail=null;
   try{
-    let blob=p.aiBlob;try{const full=await createImageBitmap(p.file,{imageOrientation:"from-image"});blob=await canvasBlob(scaledCanvas(full,1600),"image/jpeg",.92);full.close&&full.close();}catch(_){}
+    let blob=p.aiBlob;try{const full=await decodeAt(p,1600);blob=await canvasBlob(scaledCanvas(full,1600),"image/jpeg",.92);full.close&&full.close();}catch(_){}
     const reads=[];
     for(const seed of [7,17]){
       let r=null;try{r=await callAI(CEPH_PROMPT,[blob],signal,{seed});}catch(e){if(e&&e.code==="cancelled")throw e;if(!reads.length&&seed===17)throw e;continue;}
@@ -5171,7 +5208,7 @@ async function scheduleAlign(){
           const p=photos.find(x=>x.id===a.photoId);if(!p)continue;
           const g0=G(s),turned=g0.rot===90||g0.rot===270,ar=(turned?g0.cy:g0.cx)/(turned?g0.cx:g0.cy);
           const H=1600,W=Math.round(H*ar);
-          let full=null;try{full=await createImageBitmap(p.file,{imageOrientation:"from-image"});}catch(_){}
+          let full=null;try{full=await decodeAt(p,3000);}catch(_){}
           const D=renderDisplayed(full||p.prev,{rot:a.rot,flip:a.flip,align:effAlign(a),bg:p.bg,zoom:a.zoom,tilt:a.tilt,level:a.eyeLevel,dx:a.dx,dy:a.dy,nudged:!!(a.dx||a.dy||(a.zoom&&a.zoom!==1))},W,H);
           if(full&&full.close)full.close();
           const off0=facialMidOff();
@@ -5184,7 +5221,7 @@ async function scheduleAlign(){
           const p=photos.find(x=>x.id===a.photoId);if(!p)continue;
           const g0=G(s),turned=g0.rot===90||g0.rot===270,ar=(turned?g0.cy:g0.cx)/(turned?g0.cx:g0.cy);
           const H=1200,W=Math.round(H*ar);
-          let full=null;try{full=await createImageBitmap(p.file,{imageOrientation:"from-image"});}catch(_){}
+          let full=null;try{full=await decodeAt(p,3000);}catch(_){}
           const D=renderDisplayed(full||p.prev,{rot:a.rot,flip:a.flip,align:effAlign(a),bg:p.bg,zoom:a.zoom,tilt:a.tilt,level:a.eyeLevel,dx:a.dx,dy:a.dy,nudged:!!(a.dx||a.dy||(a.zoom&&a.zoom!==1))},W,H);
           if(full&&full.close)full.close();
           const off0=facialMidOff();measureOuterMid.nose=null;
@@ -5198,7 +5235,7 @@ async function scheduleAlign(){
           const p=photos.find(x=>x.id===a.photoId);if(!p)continue;
           const g0=G(s),turned=g0.rot===90||g0.rot===270,ar=(turned?g0.cy:g0.cx)/(turned?g0.cx:g0.cy);
           const H=1400,W=Math.round(H*ar);
-          let full=null;try{full=await createImageBitmap(p.file,{imageOrientation:"from-image"});}catch(_){}
+          let full=null;try{full=await decodeAt(p,3000);}catch(_){}
           const R=()=>renderDisplayed(full||p.prev,{rot:a.rot,flip:a.flip,align:effAlign(a),bg:p.bg,zoom:a.zoom,tilt:a.tilt,level:a.eyeLevel,dx:a.dx,dy:a.dy,nudged:!!(a.dx||a.dy||(a.zoom&&a.zoom!==1))},W,H);
           // canting: the photo is turned until the line through the middle of both eyes is horizontal
           let st=await measureStick(R());
@@ -5975,7 +6012,7 @@ $("genBtn").onclick=async()=>{try{syncName();}catch(_){}
         // slides 6 and 7: the horizontal guide lines are for the program only - not in the file
         if(list.some(s=>s.k===6||s.k===7||s.k===8)){removeAutoLines(doc,new Set(["Head top line","Eye line","Chin line","Ear top line","Ear bottom line"]));removeTemplateLines(doc,"h");}
         if(list.some(s=>s.k===7))removeTemplateLines(doc,"v");   // slide 7: no vertical line either
-        else if(!list.some(s=>s.k===6))addProfileGuides(doc,list);   // slide 6: no horizontal lines in the file
+        else if(!list.some(s=>s.k===6||s.k===8))addProfileGuides(doc,list);   // slides 6 and 8: no horizontal lines in the file
       }
       if($("fitLines").checked)fitEyeGuideLine(doc,list);
       fitIntraoralMidline(doc,list);
