@@ -956,8 +956,9 @@ async function shrinkTemplate(zip,from){
     return {blob,from:before,to:blob.size};
   }catch(e){console.warn("shrinkTemplate",e);return null;}
 }
+let tplRefKey="";
 async function loadTemplateFile(f){
-  $("tplStatus").textContent="جارٍ قراءة القالب…";
+  $("tplStatus").textContent="جارٍ قراءة القالب…";tplRefKey=(f.name||"")+"|"+f.size;try{ARCH.tplFromCache=null;}catch(_){}
   try{
     const zip=await JSZip.loadAsync(f);
     // the template's photos are only the old patient's pictures (replaced every time): they are made smaller
@@ -1109,10 +1110,15 @@ async function archInit(){
   $("gateBtn").innerHTML="";google.accounts.id.renderButton($("gateBtn"),{theme:"filled_blue",size:"large",text:"signin_with",shape:"pill",locale:"ar"});
   if(ARCH.token)await archWho();else{gateMsg("");google.accounts.id.prompt();}
 }
+// faster start: the template kept on this device opens right away, while the sign-in and the platform check run
+let tplBootP=null;
+function tplBoot(){tplBootP=(async()=>{if(tpl)return;const c=await tplCacheGet();if(!c||!c.blob||tpl)return;
+  await loadTemplateFile(new File([c.blob],c.name||"قالب.pptx",{type:PPTX_MIME}));if(tpl)ARCH.tplFromCache={name:c.name,size:c.size};})();return tplBootP;}
 async function archWho(){
   gateMsg("⏳ جارٍ التحقق من الحساب…");
-  try{const j=await archCall("me");ARCH.user=j.user;archRender();try{piDoctors(j.doctors);}catch(_){}gateMsg("");applySheetAI(j.user&&j.user.aiKey);archMsg("");await archNames();await archTplInfo();
-    if(!tpl&&ARCH.tplInfo)archLoadTemplate(true);}
+  try{const j=await archCall("me");ARCH.user=j.user;archRender();try{piDoctors(j.doctors);}catch(_){}gateMsg("");applySheetAI(j.user&&j.user.aiKey);archMsg("");archNames();await archTplInfo();
+    try{await tplBootP;}catch(_){}
+    if((!tpl||ARCH.tplFromCache)&&ARCH.tplInfo)archLoadTemplate(true);}
   catch(e){ARCH.user=null;if(SHEET_AI)applySheetAI(null);archMsg(e.message,true);gateMsg(e.message,true);try{google.accounts.id.disableAutoSelect();}catch(_){}}
   archRender();
 }
@@ -1369,7 +1375,11 @@ async function tplCachePut(v){try{const db=await tplDB();await new Promise(r=>{c
 async function archLoadTemplate(silent){
   if(!ARCH.tplInfo||ARCH.busy)return;ARCH.busy=true;archRender();if(!silent)archMsg("جارٍ تحميل قالب المنصة…");
   try{
+    try{await tplBootP;}catch(_){}
     let inf=null;try{inf=await archCall("info",{id:"__template__",cs:1048576});}catch(e){if(e&&e.code)throw e;}
+    const B=ARCH.tplFromCache;
+    if(tpl&&B&&(!inf||(B.name===inf.fileName&&B.size===inf.size))){ARCH.tplFromCache=null;if(!silent)archMsg("✓ القالب محدّث.");return;}
+    ARCH.tplFromCache=null;
     const c=await tplCacheGet();let f;
     if(c&&c.blob&&(!inf||(c.name===inf.fileName&&c.size===inf.size))){f={name:c.name,blob:c.blob};}
     else{f=await archDownload("__template__");await tplCachePut({name:f.name,size:f.blob.size,blob:f.blob});}
@@ -2301,17 +2311,29 @@ async function aiCompareRulers(signal){
   // with a ruler is easily taken for a buccal photo, a front one for the frontal intraoral photo
   const L=photos.filter(p=>!p.video&&/^(io_|e2e_|occ_|other$)/.test(p.cat||"")).slice(0,14);
   if(!L.length||!L.some(p=>/^io_over/.test(p.cat))&&L.length<2)return false;
-  const prompt=`These ${L.length} images are intraoral / dental photos of one patient. For EACH image answer one plain fact:
-- ruler: is a small flat METAL MEASURING RULER (a steel strip with printed graduation marks, sometimes numbers like 1 2 3 4 or "400") held against the front teeth? Answer "none" if there is no ruler. "H" if the ruler lies HORIZONTALLY (flat, pointing front-to-back, its marks / numbers read along it from left to right; it measures how far the upper incisor sticks out in front of the lower one). "V" if it stands VERTICALLY (upright, its graduation tick marks stacked one above the other along its edge; it measures the vertical overlap of the incisors). The viewing angle (front or side) does NOT matter, only the ruler direction. Brackets, wires and cheek retractors are not rulers.
+  const prompt=`These ${L.length} images are intraoral / dental photos of one patient. For EACH image answer plain facts:
+- ruler: is a MEASURING RULER held against the front teeth? It can be a small flat METAL strip with printed graduation marks (sometimes numbers like 1 2 3 4 or "400") OR a WHITE / plastic measuring CARD or gauge with tick marks along one edge. Answer "none" if there is none. Decide its direction ONLY by the direction in which its graduation tick marks follow one another (not by the shape of the card): "H" if the marks follow one another HORIZONTALLY, pointing front-to-back (it measures how far the upper incisor sticks out in front of the lower one); "V" if the marks are stacked one ABOVE the other up and down (it measures the vertical overlap of the incisors). Brackets, wires and cheek retractors are not rulers.
+- view: "front" if the camera looks straight at the front teeth (both central incisors face the camera, the arch is seen symmetrically), "side" if the teeth are seen from the side (profile of the incisors, the canine and premolars run away from the camera).
 - teeth: "closed" if the upper and lower incisors touch / overlap, "open" if the mouth is open.
-Reply with only a JSON array, one object per image in order: [{"n":1,"ruler":"none","teeth":"closed"}]`;
+Reply with only a JSON array, one object per image in order: [{"n":1,"ruler":"none","view":"front","teeth":"closed"}]`;
   const r=await callAI(prompt,L.map(p=>p.aiBlob),signal);
   const arr=Array.isArray(r)?r:(r&&Array.isArray(r.images)?r.images:[]);if(arr.length!==L.length)return false;
+  // the ruler direction decides; a ruler photo whose ruler was not recognised goes by the view (side = overjet,
+  // front = overbite); and when the two answers are crossed (a FRONT photo called overjet while a SIDE photo is called
+  // overbite) the photos were swapped - the view then decides for both
+  const R=[];
+  arr.forEach((o,i)=>{const p=L[(+o.n||i+1)-1];if(!p)return;const ru=String(o.ruler||"").toUpperCase().trim(),vw=/side/i.test(o.view||"")?"side":/front/i.test(o.view||"")?"front":"";
+    let c=ru==="H"?"io_overjet":ru==="V"?"io_overbite":null;
+    if(!c&&/^io_over/.test(p.cat||"")&&vw)c=vw==="side"?"io_overjet":"io_overbite";
+    if(c)R.push({p,c,vw,teeth:o.teeth});});
+  const byView=o=>o.vw==="side"?"io_overjet":o.vw==="front"?"io_overbite":o.c;
+  if(R.some(o=>o.c==="io_overjet"&&o.vw==="front")&&R.some(o=>o.c==="io_overbite"&&o.vw==="side"))for(const o of R)o.c=byView(o);
+  // one kind only while the views differ (a ruler read the wrong way): the views decide
+  else if(R.length>=2&&new Set(R.map(o=>o.c)).size===1&&R.some(o=>o.vw==="front")&&R.some(o=>o.vw==="side"))for(const o of R)o.c=byView(o);
   let ch=false;
-  arr.forEach((o,i)=>{const p=L[(+o.n||i+1)-1];if(!p)return;const ru=String(o.ruler||"").toUpperCase().trim();
-    const c=ru==="H"?"io_overjet":ru==="V"?"io_overbite":null;if(!c)return;   // the ruler direction decides; "none" changes nothing
-    if(c==="io_overbite"){const q=/closed/i.test(o.teeth||"")?.9:.6;if(Math.abs((p.conf||0)-q)>.01){p.conf=q;ch=true;}}
-    if(p.cat!==c){p.cat=c;p.why=((p.why||"")+(c==="io_overjet"?" · مسطرة أفقية: Overjet":" · مسطرة عمودية: Overbite")).slice(0,80);ch=true;}});
+  for(const {p,c,teeth} of R){
+    if(c==="io_overbite"){const q=/closed/i.test(teeth||"")?.9:.6;if(Math.abs((p.conf||0)-q)>.01){p.conf=q;ch=true;}}
+    if(p.cat!==c){p.cat=c;p.why=((p.why||"")+(c==="io_overjet"?" · Overjet (مسطرة أفقية / جانبية)":" · Overbite (مسطرة عمودية / أمامية)")).slice(0,80);ch=true;}}
   return ch;
 }
 async function aiCheckCanting(signal){
@@ -2671,6 +2693,9 @@ async function measureFace(canvas,frontal,profile){
 async function measureTemplateFaces(zip){
   const face=slots.filter(s=>FACE_CATS.has(s.cat)&&s.media&&zip.file(s.media));
   if(!face.length)return{ok:true,done:0,total:0};
+  // faster start: the faces of the same template were measured before on this device - use those results
+  try{const c=JSON.parse(localStorage.getItem("cp_tplrefs")||"null");
+    if(c&&c.key===tplRefKey&&face.every(s=>s.id in c.refs)){let done=0;for(const s of face){s.ref=c.refs[s.id]||null;if(s.ref)done++;}return{ok:true,done,total:face.length};}}catch(_){}
   if(!(await initFace()))return{ok:false};
   const cache=new Map();let done=0;
   for(const s of face){
@@ -2689,6 +2714,7 @@ async function measureTemplateFaces(zip){
     }catch(e){console.warn("ref",s.id,e);}
   }
   for(const b of cache.values())b.close&&b.close();
+  try{const refs={};for(const s of face)refs[s.id]=s.ref||null;localStorage.setItem("cp_tplrefs",JSON.stringify({key:tplRefKey,refs}));}catch(_){}
   return{ok:true,done,total:face.length};
 }
 function facialMidOff(){for(const s of slots){const a=assign[s.id];if(s.n===2&&a&&a.lines&&a.lines.midOff!=null)return a.lines.midOff;}return 0;}
@@ -5884,6 +5910,7 @@ async function saveFile(filename,blob){
 }
 
 renderAll();
+try{tplBoot();}catch(_){}
 archInit();
 </script>
 
