@@ -5404,7 +5404,9 @@ async function fitWholeHeads(){
   for(const s of slots){const a=assign[s.id];if(!a||!a.align||!a.photoId||(a.align.mode==="prof"||a.align.mode==="fit"||a.align.mode==="teeth"||a.align.mode==="occ"||a.align.mode==="erow"))continue;const p=photos.find(x=>x.id===a.photoId);if(!p||p.video)continue;
     if(!by.has(s.n))by.set(s.n,[]);by.get(s.n).push({s,a,p});}
   for(const list of by.values()){
-    let f=1;
+    // start from the size already reached for the same photo set-up: the measurement boxes drawn over the photo change
+    // the free room at the top, and starting again from full size made slide 2 swing between two sizes for ever
+    let f=1;for(const {a} of list)if(a.whfKey===a.alignKey&&a.whf>0)f=Math.min(f,a.whf);
     for(let it=0;it<4;it++){
       let need=1;
       for(const {s,a,p} of list){
@@ -5422,7 +5424,7 @@ async function fitWholeHeads(){
       if(need>=.995)break;
       f=Math.max(.5,f*need);
     }
-    for(const {a} of list){
+    for(const {a} of list){a.whf=f;a.whfKey=a.alignKey;
       const A=a.align;A.td=A.baseTd*f;const gd=A.gd*f;
       A.guide=A.mode==="lm"?[A.gy,A.gy+gd]:A.mode==="eye"?[A.gy]:[A.gy-gd/2,A.gy+gd/2];
     }
