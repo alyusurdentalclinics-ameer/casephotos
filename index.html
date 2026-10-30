@@ -6074,12 +6074,17 @@ $("genBtn").onclick=async()=>{try{syncName();}catch(_){}
     if(ARCH.user&&($("archSave").checked||$("archStateSave").checked))(async()=>{const J=[];   // presentation and state go up at the same time
       if($("archSave").checked)J.push(archSaveLast());if($("archStateSave").checked&&preState)J.push(archSaveState(preState.json,preState.files,true,$("archSave").checked));
       await Promise.all(J);})();
-    await saveFile(fname,out);
+    saveAuto(fname,out);   // saved straight into the computer's Downloads folder (no «save as» window)
     status(`تم: ${fname} (${(out.size/1048576).toFixed(1)} MB)${dropPaths.size?` · حُذفت ${arNum(dropPaths.size)} شريحة فارغة`:""}${skippedVideo?` · ${arNum(skippedVideo)} فيديو بقي من القالب`:""}`);
     $("st4").classList.add("done");$("genStatus").dataset.done="1";
   }catch(err){console.error(err);status("تعذّر إنشاء العرض: "+(err.message||err));}
   finally{delete $("genStatus").dataset.busy;setBar("genBar",null);btn.disabled=false;updateButtons();}
 };
+/* the presentation is downloaded at once into the browser's download folder (Downloads), without asking where */
+function saveAuto(filename,blob){
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;a.rel="noopener";document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},60000);toast("نزل العرض بمجلد التنزيلات (Downloads): "+filename);
+}
 async function saveFile(filename,blob){
   if(window.showSaveFilePicker){
     try{const h=await showSaveFilePicker({suggestedName:filename,types:/\.cpstate$/i.test(filename)?[{description:"حالة البرنامج",accept:{"application/zip":[".cpstate"]}}]:[{description:"PowerPoint",accept:{"application/vnd.openxmlformats-officedocument.presentationml.presentation":[".pptx"]}}]});
