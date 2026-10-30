@@ -1878,6 +1878,15 @@ async function callGemini(prompt,blobs,signal,opt){
 }
 let setStatusBusy=null;
 async function geminiOnce(model,body,signal,isPrimary){
+  // a request that gets no answer in 75 s is given up (it used to wait for ever and hold up the whole sorting); the next
+  // model is then asked
+  const ctl=new AbortController();let timedOut=false;const tm=setTimeout(()=>{timedOut=true;ctl.abort();},75000);
+  if(signal){if(signal.aborted)ctl.abort();else signal.addEventListener("abort",()=>ctl.abort(),{once:true});}
+  try{return await geminiOnce0(model,body,ctl.signal,isPrimary);}
+  catch(e){if(timedOut&&e&&e.code==="cancelled")throw {code:"network",message:"no answer in 75 s"};throw e;}
+  finally{clearTimeout(tm);}
+}
+async function geminiOnce0(model,body,signal,isPrimary){
   let r;
   try{
     const local=viaLocalServer();
@@ -1899,7 +1908,7 @@ async function geminiOnce(model,body,signal,isPrimary){
     else if(r.status===404||r.status===400)code="model";
     throw {code,message:t,status:r.status};
   }
-  const j=await r.json();
+  let j;try{j=await r.json();}catch(e){if(e&&e.name==="AbortError")throw {code:"cancelled"};throw {code:"http",message:"رد غير مكتمل"};}
   const c=j.candidates&&j.candidates[0];
   const text=c&&c.content&&c.content.parts?c.content.parts.map(x=>x.text||"").join(""):"";
   if(!text)throw {code:"http",message:(j.promptFeedback&&JSON.stringify(j.promptFeedback))||"رد فارغ"};
@@ -2305,23 +2314,25 @@ async function aiRetryLeftovers(signal){
   const left=photos.filter(p=>!p.video&&!placed.has(p.id)&&(!p.aiSeen||!p.cat||p.cat==="other"||empty.length)).slice(0,14);
   if(!left.length||!empty.length)return false;
   let ch=false;
-  // 4 photos are asked at the same time (each wave sees the frames still empty after the previous wave)
-  for(let w=0;w<left.length;w+=4){
-    const want=[...new Set(slots.filter(free).map(t=>t.cat))];if(!want.length)break;
-    const extra=`\n\nSECOND LOOK: this single image was not placed in the first pass. These template frames are STILL EMPTY: ${want.map(k=>k+" ("+(CATS[k]?CATS[k].en.split(":")[0].slice(0,80):k)+")").join("; ")}.
-Look carefully at the image and apply all the rules above. If it is one of these empty categories, answer that category. If it clearly is another category, answer that one. Answer "other" only if it is not an orthodontic record photo at all.`;
-    const wave=left.slice(w,w+4);
-    const got=await Promise.all(wave.map(p=>callAI(buildPrompt([p],0)+extra,[p.aiBlob],signal).then(res=>({res}),e=>({e}))));
-    for(let k=0;k<wave.length;k++){const p=wave[k],q=got[k];
-      if(q.e){if(q.e&&q.e.code==="cancelled")throw q.e;console.warn(q.e);continue;}const res=q.res;
-      const arr=Array.isArray(res)?res:(res&&Array.isArray(res.images)?res.images:(res&&res.cat?[res]:[]));const r=arr[0];if(!r)continue;
+  // the photos are asked in groups of up to 5 per request (the long sorting rules are sent once per group, not once per photo),
+  // all groups at the same time; every photo still gets its own answer
+  const want=[...new Set(slots.filter(free).map(t=>t.cat))];if(!want.length)return false;
+  const groups=[];for(let w=0;w<left.length;w+=5)groups.push(left.slice(w,w+5));
+  const got=await Promise.all(groups.map(G=>{
+    const extra=`\n\nSECOND LOOK: these ${G.length} image(s) were not placed in the first pass. These template frames are STILL EMPTY: ${want.map(k=>k+" ("+(CATS[k]?CATS[k].en.split(":")[0].slice(0,80):k)+")").join("; ")}.
+Look carefully at EACH image on its own and apply all the rules above. If it is one of these empty categories, answer that category. If it clearly is another category, answer that one. Answer "other" only if it is not an orthodontic record photo at all.`;
+    return callAI(buildPrompt(G,0)+extra,G.map(p=>p.aiBlob),signal).then(res=>({G,res}),e=>({G,e}));}));
+  for(const {G,res,e} of got){
+    if(e){if(e&&e.code==="cancelled")throw e;console.warn(e);continue;}
+    const arr=Array.isArray(res)?res:(res&&Array.isArray(res.images)?res.images:(res&&res.cat?[res]:[]));
+    for(const r of arr){const p=G[(+r.n||0)-1];if(!p)continue;
       let cat=String(r.cat||"other");if(!CATS[cat]||!!CATS[cat].video!==p.video)cat="other";
       if(cat==="other"||cat===p.cat&&p.aiSeen)continue;
       p.aiSeen=true;p.cat=cat;p.conf=Math.max(0,Math.min(1,+r.conf||.5));p.rot=[0,90,180,270].includes(+r.rot)?+r.rot:(p.rot||0);
       p.why=(String(r.why||"").slice(0,60)+" · فحص ثانٍ").slice(0,80);
       if(/^(io|e2e)_(right|left)$/.test(p.cat)&&!p.rot){const sd=buccalSide(p);if(sd&&!p.cat.endsWith(sd))p.cat=p.cat.replace(/(right|left)$/,sd);}
-      ch=true;autoAssign();}
-  }
+      ch=true;}}
+  if(ch)autoAssign();
   return ch;
 }
 /* side intraoral views: AI models often swap right and left. Instead of naming the side, the AI is asked a
