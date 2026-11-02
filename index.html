@@ -3939,6 +3939,8 @@ async function openZoomView(s,pic,title){
     :isProfLineSlot(s)&&VA.prof?{k:"prof",x:VA.prof.x,y1:VA.prof.y1,y2:VA.prof.y2,c:"#4A90D9"}
     :isIoMidSlot(s)?{k:"io",x:ioMidX(s),c:"#4A90D9"}:null;
   const VX0=VL?VL.x:null;
+  // slide 4, lips-apart photo: the two short lines (midline → pupils) - up / down, and shorter / longer from the pupil side
+  const SL=VL&&VL.k==="fmid"&&s.cat==="frontal_lips_apart"&&VA.l4?{y:l4Y(VA.l4),len:l4Len(VA.l4,VA.fmid)}:null;const SL0=SL?{...SL}:null;
   const hRes=()=>{if(!LL)return "";const m=LL.nose-LL.brow,lo=LL.chin-LL.nose;if(!(m>0))return "";const d=(lo-m)/m*100;
     return `حاجب→أنف ${(m/(LL.chin-LL.brow)*100).toFixed(1)}٪ · أنف→ذقن ${(lo/(LL.chin-LL.brow)*100).toFixed(1)}٪ · الفرق ${d>=0?"+":""}${d.toFixed(1)}٪ ${Math.abs(d)<3?"(متساويان تقريباً)":d>0?"(السفلي أطول)":"(السفلي أقصر)"}`;};
   const ov=document.createElement("div");
@@ -3946,7 +3948,7 @@ async function openZoomView(s,pic,title){
   ov.innerHTML=`<button class="btn sm" data-z="no" type="button" title="إغلاق" style="position:absolute;top:10px;left:10px;z-index:3;font-size:20px;line-height:1;padding:6px 12px;background:#C00000;color:#fff;border-radius:50%">✕</button><div style="display:flex;gap:6px 8px;align-items:center;padding:8px 12px 8px 64px;color:#fff;flex-wrap:wrap;background:#0a1014;min-width:0;max-width:100%;box-sizing:border-box;flex:none">
     <b style="font-size:18px">تكبير — ${esc(title||s.label)}</b>${LL?`<span class="res" style="background:#fff;color:#000;font-weight:700;padding:3px 10px;border-radius:6px;direction:rtl"></span>`:""}<span style="opacity:.8;font-size:13px;flex:1 1 260px;min-width:0">${VL&&!LL?"الأسهم ← → تحرك الخط العمودي يمين ويسار (Shift: أسرع) · ":""}${LL?"الأسهم ← → تحرك الخط الأحمر يمين ويسار · اسحب خط الحاجب أو الأنف أو الذقن للأعلى أو الأسفل (عمودياً فقط) · اسحب الصورة للتنقل · عجلة الماوس للتكبير · الشريط الثاني بطول الأول للمقارنة":"اسحب الصورة للتنقل · عجلة الماوس أو ＋/－ للتكبير · Esc للإغلاق"}</span>
     <span style="flex:1"></span>${guides?`<label style="font-size:13px"><input type="checkbox" class="gl" checked> خطوط الشريحة</label>`:""}${LL?`<button class="btn sm" data-z="auto" type="button" title="يرجع الخطوط لمكانها التلقائي">↺ الخطوط التلقائية</button>`:""}
-    <button class="btn sm" data-z="in">＋ تكبير</button><button class="btn sm" data-z="out">－ تصغير</button><button class="btn sm" data-z="fit">ملء الشاشة</button>${VL?`<button class="btn sm" data-z="vl" type="button" title="يسار">◀</button><button class="btn sm" data-z="vr" type="button" title="يمين">▶</button>`:""}${LL||VL?`<button class="btn sm" data-z="ok" style="background:#1f8f4e;color:#fff">✓ اعتماد</button><button class="btn sm" data-z="cancel">إلغاء</button>`:`<button class="btn sm" data-z="no">✕ إغلاق</button>`}</div>
+    <button class="btn sm" data-z="in">＋ تكبير</button><button class="btn sm" data-z="out">－ تصغير</button><button class="btn sm" data-z="fit">ملء الشاشة</button>${SL?`<button class="btn sm" data-z="su" type="button" title="الخطين القصيرين لفوق (أو السهم ↑)">▲ خط البؤبؤ</button><button class="btn sm" data-z="sd" type="button" title="الخطين القصيرين لجوه (أو السهم ↓)">▼ خط البؤبؤ</button><button class="btn sm" data-z="ss" type="button" title="أقصر من جهة البؤبؤ (أو [ )">⟷ أقصر</button><button class="btn sm" data-z="sg" type="button" title="أطول من جهة البؤبؤ (أو ] )">⟷ أطول</button>`:""}${VL?`<button class="btn sm" data-z="vl" type="button" title="يسار">◀</button><button class="btn sm" data-z="vr" type="button" title="يمين">▶</button>`:""}${LL||VL?`<button class="btn sm" data-z="ok" style="background:#1f8f4e;color:#fff">✓ اعتماد</button><button class="btn sm" data-z="cancel">إلغاء</button>`:`<button class="btn sm" data-z="no">✕ إغلاق</button>`}</div>
     <canvas style="flex:1 1 0;width:100%;min-height:0;min-width:0;max-width:100%;display:block;cursor:grab;touch-action:none"></canvas>`;
   zoomHeaderLayout(ov);document.body.appendChild(ov);
   const cv=ov.querySelector("canvas"),g=cv.getContext("2d");
@@ -3971,22 +3973,34 @@ async function openZoomView(s,pic,title){
       g.strokeStyle="#E02020";g.lineWidth=3;g.beginPath();g.moveTo(bx-30,Y(2*LL.nose-LL.brow));g.lineTo(bx-30,Y(LL.chin));g.stroke();
       g.restore();const rs=ov.querySelector(".res");if(rs)rs.textContent=hRes();}
     if(VL){const X=u=>(u*BW-cx)*z+vw/2,Y=v=>(v*BH-cy)*z+vh/2,x=X(VL.x);g.save();g.strokeStyle=VL.c;g.lineWidth=3;g.beginPath();
-      g.moveTo(x,VL.y1!=null?Y(VL.y1):0);g.lineTo(x,VL.y2!=null?Y(VL.y2):vh);g.stroke();g.restore();}};
+      g.moveTo(x,VL.y1!=null?Y(VL.y1):0);g.lineTo(x,VL.y2!=null?Y(VL.y2):vh);g.stroke();g.restore();}
+    if(SL){const X=u=>(u*BW-cx)*z+vw/2,Y=v=>(v*BH-cy)*z+vh/2,y=Y(SL.y);g.save();g.strokeStyle=slDrag?"#FFD800":"#4A90D9";g.lineWidth=4;g.lineCap="round";
+      g.beginPath();g.moveTo(X(VL.x-SL.len),y);g.lineTo(X(VL.x+SL.len),y);g.stroke();
+      for(const u of [VL.x-SL.len,VL.x+SL.len]){g.beginPath();g.arc(X(u),y,7,0,2*Math.PI);g.fillStyle="rgba(255,255,255,.85)";g.fill();g.lineWidth=2;g.stroke();}
+      g.restore();}};
   const zoomAt=(f,mx,my)=>{const bx=(mx-vw/2)/z+cx,by=(my-vh/2)/z+cy;z=Math.max(zmin(),Math.min(14,z*f));cx=bx-(mx-vw/2)/z;cy=by-(my-vh/2)/z;draw();};
-  let last=null,hDrag=null;var hSel=null;
+  let last=null,hDrag=null;var hSel=null,slDrag=null;
+  // a press on the short line: drag it up / down; a press on one of its ends: drag that end (both lines change their length)
+  const hitSL=(mx,my)=>{if(!SL)return null;const X=u=>(u*BW-cx)*z+vw/2,y=(SL.y*BH-cy)*z+vh/2;if(Math.abs(my-y)>12)return null;
+    const a=X(VL.x-SL.len),b=X(VL.x+SL.len);if(Math.abs(mx-a)<14||Math.abs(mx-b)<14)return "end";if(mx>Math.min(a,b)-4&&mx<Math.max(a,b)+4)return "move";return null;};
   const hitLine=my=>{if(!LL)return null;let best=null,bd=14;for(const k of ["brow","nose","chin"]){const d=Math.abs((LL[k]*BH-cy)*z+vh/2-my);if(d<bd){bd=d;best=k;}}return best;};
-  cv.addEventListener("pointerdown",e=>{const r=cv.getBoundingClientRect(),my=e.clientY-r.top;const k=hitLine(my);cv.setPointerCapture(e.pointerId);
+  cv.addEventListener("pointerdown",e=>{const r=cv.getBoundingClientRect(),my=e.clientY-r.top;const sl=hitSL(e.clientX-r.left,my);if(sl){slDrag=sl;cv.setPointerCapture(e.pointerId);cv.style.cursor=sl==="end"?"ew-resize":"ns-resize";draw();return;}
+    const k=hitLine(my);cv.setPointerCapture(e.pointerId);
     if(k){hDrag=k;hSel=k;cv.style.cursor="ns-resize";draw();return;}last=[e.clientX,e.clientY];cv.style.cursor="grabbing";});
   cv.addEventListener("pointermove",e=>{const r=cv.getBoundingClientRect(),my=e.clientY-r.top;
+    if(slDrag){const u=((e.clientX-r.left-vw/2)/z+cx)/BW,v=((my-vh/2)/z+cy)/BH;if(slDrag==="move")SL.y=Math.max(0,Math.min(1,v));else SL.len=Math.max(.005,Math.min(.5,Math.abs(u-VL.x)));draw();return;}
+    if(SL&&!last){const h=hitSL(e.clientX-r.left,my);if(h){cv.style.cursor=h==="end"?"ew-resize":"ns-resize";return;}}
     if(hDrag){let v=((my-vh/2)/z+cy)/BH;const gap=.02;   // up / down only, the lines keep their order
       if(hDrag==="brow")v=Math.min(v,LL.nose-gap);else if(hDrag==="nose")v=Math.max(LL.brow+gap,Math.min(v,LL.chin-gap));else v=Math.max(v,LL.nose+gap);
       LL[hDrag]=Math.max(0,Math.min(1,v));draw();return;}
     if(!last){if(LL)cv.style.cursor=hitLine(my)?"ns-resize":"grab";return;}cx-=(e.clientX-last[0])/z;cy-=(e.clientY-last[1])/z;last=[e.clientX,e.clientY];draw();});
-  const up=()=>{last=null;hDrag=null;cv.style.cursor="grab";};cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",up);
+  const up=()=>{last=null;hDrag=null;if(slDrag){slDrag=null;draw();}cv.style.cursor="grab";};cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",up);
   cv.addEventListener("dblclick",e=>{const r=cv.getBoundingClientRect();zoomAt(2,e.clientX-r.left,e.clientY-r.top);});
   cv.addEventListener("wheel",e=>{e.preventDefault();const r=cv.getBoundingClientRect();zoomAt(e.deltaY<0?1.15:1/1.15,e.clientX-r.left,e.clientY-r.top);},{passive:false});
   const key=e=>{if(e.key==="Escape")close();else if(e.key==="+"||e.key==="=")zoomAt(1.3,vw/2,vh/2);else if(e.key==="-")zoomAt(1/1.3,vw/2,vh/2);
     else if(VL&&(e.key==="ArrowLeft"||e.key==="ArrowRight")){e.preventDefault();vMove((e.key==="ArrowRight"?1:-1)*(e.shiftKey?4:1));}
+    else if(SL&&(e.key==="ArrowUp"||e.key==="ArrowDown")){e.preventDefault();slMove((e.key==="ArrowUp"?-1:1)*(e.shiftKey?4:1));}
+    else if(SL&&(e.key==="["||e.key==="]")){e.preventDefault();slLen((e.key==="]"?1:-1)*(e.shiftKey?4:1));}
     else if(LL&&hSel&&(e.key==="ArrowUp"||e.key==="ArrowDown")){e.preventDefault();const st=(e.shiftKey?5:1)/BH*4;LL[hSel]+=e.key==="ArrowUp"?-st:st;
       LL.brow=Math.min(LL.brow,LL.nose-.02);LL.chin=Math.max(LL.chin,LL.nose+.02);draw();}};
   document.addEventListener("keydown",key);
@@ -3994,17 +4008,22 @@ async function openZoomView(s,pic,title){
   const close=()=>{document.removeEventListener("keydown",key);window.removeEventListener("resize",onRs);ov.remove();};
   const gl=ov.querySelector(".gl");if(gl)gl.onchange=draw;
   function vMove(n){VL.x=Math.max(0,Math.min(1,VL.x+n*.0025));draw();}
+  function slMove(n){if(!SL)return;SL.y=Math.max(0,Math.min(1,SL.y+n*.0025));draw();}
+  function slLen(n){if(!SL)return;SL.len=Math.max(.005,Math.min(.5,SL.len+n*.0025));draw();}
   const saveV=()=>{if(!VL||Math.abs(VL.x-VX0)<1e-6)return false;
     if(VL.k==="mid"){HA.lines=Object.assign({},HA.lines,{mid:VL.x});HA.linesMan=true;}
     else if(VL.k==="fmid"){VA.fmid=VL.x;VA.fmidMan=true;setTimeout(()=>{try{scheduleAlign();}catch(_){}},0);}   // slide 12 follows the full smile line
     else if(VL.k==="io"){VA.ioMid=VL.x;}
     else{VA.prof=Object.assign({},VA.prof,{x:VL.x});VA.profMan=true;}
     return true;};
-  const saveLines=()=>{if(!LL){if(saveV())renderSlides();return;}saveV();const ch=["brow","nose","chin"].some(k=>Math.abs(LL[k]-HA.lines[k])>1e-5);
+  const saveSL=()=>{if(!SL||Math.abs(SL.y-SL0.y)<1e-6&&Math.abs(SL.len-SL0.len)<1e-6)return false;
+    VA.l4=Object.assign({},VA.l4,{ey:SL.y,len:SL.len});VA.l4Man=true;VA.l4Pid=VA.photoId;return true;};
+  const saveLines=()=>{if(!LL){const a1=saveV(),a2=saveSL();if(a1||a2)renderSlides();return;}saveV();const ch=["brow","nose","chin"].some(k=>Math.abs(LL[k]-HA.lines[k])>1e-5);
     if(ch){HA.lines=Object.assign({},HA.lines,LL);HA.linesMan=true;}if(ch||VL)renderSlides();};
   ov.querySelectorAll("[data-z]").forEach(b=>b.onclick=()=>{const v=b.dataset.z;if(v==="in")zoomAt(1.3,vw/2,vh/2);else if(v==="out")zoomAt(1/1.3,vw/2,vh/2);else if(v==="fit"){z=zmin();cx=BW/2;cy=BH/2;draw();}
     else if(v==="auto"){HA.lines=null;HA.linesMan=false;HA.alignKey=null;close();renderSlides();scheduleAlign();toast("رجعت الخطوط التلقائية.");}
     else if(v==="vl")vMove(-1);else if(v==="vr")vMove(1);
+    else if(v==="su")slMove(-1);else if(v==="sd")slMove(1);else if(v==="ss")slLen(-1);else if(v==="sg")slLen(1);
     else if(v==="ok"||(v==="no"&&(LL||VL))){saveLines();close();}else close();});
   draw();
 }
@@ -5265,7 +5284,7 @@ async function scheduleAlign(){
         // slide 4, lips-apart photo: the brow line (measured as on slide 2) and both pupils, for the long and short lines
         for(const s of slots){
           const a=assign[s.id];
-          if(!a||!a.align||!isMidSlot(s)||s.cat!=="frontal_lips_apart"||(a.l4&&a.l4Key===a.alignKey&&a.l4Td===a.align.td))continue;
+          if(!a||!a.align||!isMidSlot(s)||s.cat!=="frontal_lips_apart"||(a.l4&&a.l4Key===a.alignKey&&a.l4Td===a.align.td)||(a.l4&&a.l4Man&&a.l4Pid===a.photoId))continue;
           const p=photos.find(x=>x.id===a.photoId);if(!p)continue;
           const g0=G(s),turned=g0.rot===90||g0.rot===270,ar=(turned?g0.cy:g0.cx)/(turned?g0.cx:g0.cy);
           const H=1200,W=Math.round(H*ar);
@@ -5366,7 +5385,7 @@ function drawSlidePreview(sec,list,bigW){
   const cv=document.createElement("canvas");const W=bigW||1100,H=Math.round(W*SLIDE_H/SLIDE_W);cv.width=W;cv.height=H;
   const g=cv.getContext("2d");g.fillStyle="#ffffff";g.fillRect(0,0,W,H);
   const k=W/SLIDE_W;
-  let guide=null,fitted=false,hasGuide=false;
+  let guide=null,fitted=false,hasGuide=false;const late=[];
   for(const s of list){
     if(s.video)continue;
     const g0=G(s),turned=g0.rot===90||g0.rot===270,dw=(turned?g0.cy:g0.cx)*k,dh=(turned?g0.cx:g0.cy)*k;
@@ -5386,9 +5405,10 @@ function drawSlidePreview(sec,list,bigW){
         g.restore();
       }
       if(isIoMidSlot(s)){const fr=frameRect(s),x=(fr.left+ioMidX(s)*fr.w)*k,ex=fr.h*.08*k;g.save();g.strokeStyle="#4A90D9";g.lineWidth=2;g.beginPath();g.moveTo(x,top-ex);g.lineTo(x,top+dh+ex);g.stroke();g.restore();}
-      if(a.fmid!=null&&isMidSlot(s)&&s.cat==="frontal_lips_apart"&&a.l4){const fr=frameRect(s),mx=fr.left+a.fmid*fr.w,rx=fr.left+a.l4.rx*fr.w,len=Math.abs(mx-rx),yB=(fr.top+a.l4.brow*fr.h)*k,yE=(fr.top+(a.l4.ry+a.l4.ly)/2*fr.h)*k;
-        g.save();g.strokeStyle="#4A90D9";g.lineWidth=1.5;g.beginPath();g.moveTo(0,yB);g.lineTo(W,yB);g.stroke();
-        g.lineWidth=2.5;g.beginPath();g.moveTo((mx-len)*k,yE);g.lineTo((mx+len)*k,yE);g.stroke();g.restore();}
+      if(a.fmid!=null&&isMidSlot(s)&&s.cat==="frontal_lips_apart"&&a.l4){const fr=frameRect(s),mx=fr.left+a.fmid*fr.w,len=l4Len(a.l4,a.fmid)*fr.w,yB=(fr.top+a.l4.brow*fr.h)*k,yE=(fr.top+l4Y(a.l4)*fr.h)*k;
+        // drawn after all the photos (on top of every photo, not behind the next one)
+        late.push(()=>{g.save();g.strokeStyle="#4A90D9";g.lineWidth=1.5;g.beginPath();g.moveTo(0,yB);g.lineTo(W,yB);g.stroke();
+          g.lineWidth=2.5;g.beginPath();g.moveTo((mx-len)*k,yE);g.lineTo((mx+len)*k,yE);g.stroke();g.restore();});}
       if(a.fmid!=null&&isMidSlot(s)){const fr=frameRect(s),x=(fr.left+a.fmid*fr.w)*k;g.save();g.strokeStyle=s.cat==="frontal_lips_apart"?"#E02020":"#4A90D9";g.lineWidth=1.5;g.beginPath();g.moveTo(x,top);g.lineTo(x,top+dh);g.stroke();g.restore();}
       if(a.prof){const T=profileLineOnSlide(s,a.prof);g.save();g.strokeStyle="#4A90D9";g.lineWidth=2;g.beginPath();g.moveTo(T.x*k,T.y1*k);g.lineTo(T.x*k,T.y2*k);g.stroke();g.restore();}
       if(a.stick){const T=stickOnSlide(s,a.stick);g.save();g.strokeStyle="#4A90D9";g.lineWidth=2;g.beginPath();g.moveTo(T.x1*k,T.y1*k);g.lineTo(T.x2*k,T.y2*k);g.stroke();
@@ -5405,6 +5425,7 @@ function drawSlidePreview(sec,list,bigW){
     }else{g.fillStyle="#E6ECF0";g.fillRect(left,top,dw,dh);}
     g.strokeStyle="rgba(20,36,45,.25)";g.lineWidth=1;g.strokeRect(left+.5,top+.5,dw-1,dh-1);
   }
+  for(const f of late)f();
   if(hasGuide&&!fitted){const Y=fixedGuides(list[0],list)||slideGuides(list.filter(t=>!t.video));if(Y)guide=Y.map(v=>v*k);}
   if(guide){
     g.save();g.strokeStyle="rgba(214,48,49,.9)";g.lineWidth=2;g.setLineDash([10,6]);
@@ -5441,13 +5462,15 @@ async function measureLipLines(canvas){
   if(brow==null){let y=0;for(let i=17;i<=26;i++)y+=P[i].y;brow=y/10/H;}
   return {brow,rx:eL[0],ry:eL[1],lx:eR[0],ly:eR[1]};
 }
+const l4Y=l=>l.ey!=null?l.ey:(l.ry+l.ly)/2;            // height of the short lines (share of the frame height)
+const l4Len=(l,fmid)=>l.len!=null?l.len:Math.abs(fmid-l.rx);   // length of each short line (share of the frame width)
 /* slide 4 in the file: the long horizontal line on the brow line; the short line from the midline to the patient's RIGHT
    pupil, and the second one from the midline towards the LEFT pupil with the same length */
 function fitLipLines(doc,list){
   if(!$("fitLines").checked)return;
   const s=list.find(t=>t.k===4&&t.cat==="frontal_lips_apart"&&assign[t.id]&&assign[t.id].photoId);if(!s)return;
   const a=assign[s.id];if(!a||!a.l4||a.fmid==null)return;
-  const f=frameRect(s),yB=Math.round(f.top+a.l4.brow*f.h),yE=Math.round(f.top+(a.l4.ry+a.l4.ly)/2*f.h),mx=f.left+a.fmid*f.w,rx=f.left+a.l4.rx*f.w,len=Math.max(1,Math.round(Math.abs(mx-rx)));
+  const f=frameRect(s),yB=Math.round(f.top+a.l4.brow*f.h),yE=Math.round(f.top+l4Y(a.l4)*f.h),mx=f.left+a.fmid*f.w,rx=f.left+a.l4.rx*f.w,len=Math.max(1,Math.round(l4Len(a.l4,a.fmid)*f.w));
   const hs=[];
   for(const el of doc.getElementsByTagNameNS(NS.p,"cxnSp")){const sp=[...el.children].find(c=>c.localName==="spPr"),xf=sp&&[...sp.children].find(c=>c.localName==="xfrm");if(!xf)continue;
     const o=[...xf.children].find(c=>c.localName==="off"),e=[...xf.children].find(c=>c.localName==="ext");if(!o||!e)continue;
@@ -5456,6 +5479,9 @@ function fitLipLines(doc,list){
   const long=hs.reduce((m,h)=>h.w>m.w?h:m,hs[0]);if(long.w>SLIDE_W*.5)long.o.setAttribute("y",String(yB));
   const shorts=hs.filter(h=>h!==long&&h.w<SLIDE_W*.25).sort((p,q)=>p.x-q.x);
   // the line on the side of the picture where the patient's right eye is (left of the picture), then the other side
+  // in front of every photo (the template had the long line behind the third photo)
+  for(const h of [long,...shorts]){let n=h.o;while(n&&n.localName!=="cxnSp")n=n.parentNode;const sp=n&&n.parentNode;if(!sp)continue;
+    const ext=[...sp.children].find(c=>c.localName==="extLst");sp.removeChild(n);if(ext)sp.insertBefore(n,ext);else sp.appendChild(n);}
   const [s1,s2]=shorts;const toR=rx<mx;
   if(s1){s1.o.setAttribute("x",String(Math.round(toR?mx-len:mx)));s1.o.setAttribute("y",String(yE));s1.e.setAttribute("cx",String(len));}
   if(s2){s2.o.setAttribute("x",String(Math.round(toR?mx:mx-len)));s2.o.setAttribute("y",String(yE));s2.e.setAttribute("cx",String(len));}
