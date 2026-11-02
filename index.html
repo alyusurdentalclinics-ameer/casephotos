@@ -1156,7 +1156,9 @@ function archMsg(t,bad){const el=$("archStatus");el.textContent=t||"";el.style.c
 function gateMsg(t,bad){const m=$("gateMsg");if(!m)return;m.textContent=t||"";m.classList.toggle("bad",!!bad);}
 function archRender(){
   const signed=!!ARCH.user;$("gate").hidden=signed;document.documentElement.style.overflow=signed?"":"hidden";
-  $("archUser").textContent=signed?`🟢 ${ARCH.user.email}${ARCH.user.role==="admin"?" · مدير":""}`:"⚪ غير متصل — سجّل الدخول";
+  // only the name (from the Users sheet); the e-mail when no name is written there
+  $("archUser").textContent=signed?`🟢 ${String(ARCH.user.name||"").trim()||ARCH.user.email}`:"⚪ غير متصل — سجّل الدخول";
+  if(signed)$("archUser").title=ARCH.user.email;
   $("gsiBtn").hidden=signed||!archReady();$("archOut").hidden=!signed;
   $("archSave").disabled=!signed;$("archStateSave").disabled=!signed;$("archTplSave").hidden=true;$("archTplSave").disabled=!signed||!tpl||ARCH.busy;
   $("archTplLoad").hidden=true;$("archFind").disabled=!signed;$("archQ").disabled=!signed;
