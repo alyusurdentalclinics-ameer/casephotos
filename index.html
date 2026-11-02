@@ -5262,6 +5262,18 @@ async function scheduleAlign(){
           // the full smile line moved: the slide 12 midline follows
           if(Math.abs(facialMidOff()-off0)>1e-4&&slots.some(t=>t.cat==="io_frontal"&&assign[t.id]&&assign[t.id].photoId))alignAgain=true;
         }
+        // slide 4, lips-apart photo: the brow line (measured as on slide 2) and both pupils, for the long and short lines
+        for(const s of slots){
+          const a=assign[s.id];
+          if(!a||!a.align||!isMidSlot(s)||s.cat!=="frontal_lips_apart"||(a.l4&&a.l4Key===a.alignKey&&a.l4Td===a.align.td))continue;
+          const p=photos.find(x=>x.id===a.photoId);if(!p)continue;
+          const g0=G(s),turned=g0.rot===90||g0.rot===270,ar=(turned?g0.cy:g0.cx)/(turned?g0.cx:g0.cy);
+          const H=1200,W=Math.round(H*ar);
+          let full=null;try{full=await decodeAt(p,3000);}catch(_){}
+          const D=renderDisplayed(full||p.prev,{rot:a.rot,flip:a.flip,align:effAlign(a),bg:p.bg,zoom:a.zoom,tilt:a.tilt,level:a.eyeLevel,dx:a.dx,dy:a.dy,nudged:!!(a.dx||a.dy||(a.zoom&&a.zoom!==1))},W,H);
+          if(full&&full.close)full.close();
+          a.l4=await measureLipLines(D);a.l4Key=a.alignKey;a.l4Td=a.align.td;
+        }
         for(const s of slots){
           const a=assign[s.id];
           if(!a||!a.align||s.cat!=="canting"||!$("fitLines").checked||(a.stick!==undefined&&a.stickTd===a.align.td&&a.stickKey===a.alignKey))continue;
@@ -5374,6 +5386,9 @@ function drawSlidePreview(sec,list,bigW){
         g.restore();
       }
       if(isIoMidSlot(s)){const fr=frameRect(s),x=(fr.left+ioMidX(s)*fr.w)*k,ex=fr.h*.08*k;g.save();g.strokeStyle="#4A90D9";g.lineWidth=2;g.beginPath();g.moveTo(x,top-ex);g.lineTo(x,top+dh+ex);g.stroke();g.restore();}
+      if(a.fmid!=null&&isMidSlot(s)&&s.cat==="frontal_lips_apart"&&a.l4){const fr=frameRect(s),mx=fr.left+a.fmid*fr.w,rx=fr.left+a.l4.rx*fr.w,len=Math.abs(mx-rx),yB=(fr.top+a.l4.brow*fr.h)*k,yE=(fr.top+(a.l4.ry+a.l4.ly)/2*fr.h)*k;
+        g.save();g.strokeStyle="#4A90D9";g.lineWidth=1.5;g.beginPath();g.moveTo(0,yB);g.lineTo(W,yB);g.stroke();
+        g.lineWidth=2.5;g.beginPath();g.moveTo((mx-len)*k,yE);g.lineTo((mx+len)*k,yE);g.stroke();g.restore();}
       if(a.fmid!=null&&isMidSlot(s)){const fr=frameRect(s),x=(fr.left+a.fmid*fr.w)*k;g.save();g.strokeStyle=s.cat==="frontal_lips_apart"?"#E02020":"#4A90D9";g.lineWidth=1.5;g.beginPath();g.moveTo(x,top);g.lineTo(x,top+dh);g.stroke();g.restore();}
       if(a.prof){const T=profileLineOnSlide(s,a.prof);g.save();g.strokeStyle="#4A90D9";g.lineWidth=2;g.beginPath();g.moveTo(T.x*k,T.y1*k);g.lineTo(T.x*k,T.y2*k);g.stroke();g.restore();}
       if(a.stick){const T=stickOnSlide(s,a.stick);g.save();g.strokeStyle="#4A90D9";g.lineWidth=2;g.beginPath();g.moveTo(T.x1*k,T.y1*k);g.lineTo(T.x2*k,T.y2*k);g.stroke();
@@ -5414,6 +5429,36 @@ async function measureOuterMid(canvas){
   // the nose (centre and width, in shares of the picture width) is kept for the slide 12 midline (see facialMidOff)
   measureOuterMid.nose={c:(P[31].x+P[35].x)/2/canvas.width,w:Math.abs(P[35].x-P[31].x)/canvas.width};
   return (P[36].x+P[45].x)/2/canvas.width;
+}
+/* slide 4: brow line (the same measure as slide 2's brow line) and the centre of each pupil, as shares of the frame */
+async function measureLipLines(canvas){
+  if(!(await initFace()))return null;
+  const det=await faceapi.detectSingleFace(canvas,new faceapi.SsdMobilenetv1Options({minConfidence:.3})).withFaceLandmarks();
+  if(!det)return null;const P=det.landmarks.positions,W=canvas.width,H=canvas.height;
+  const ctr=(a,b)=>{let x=0,y=0;for(let i=a;i<=b;i++){x+=P[i].x;y+=P[i].y;}const n=b-a+1;return [x/n/W,y/n/H];};
+  const eL=ctr(36,41),eR=ctr(42,47);   // eL: the eye on the LEFT of the picture = the patient's RIGHT eye
+  let brow=null;try{const L=await measureLines(canvas);if(L&&L.brow>0)brow=L.brow;}catch(_){}
+  if(brow==null){let y=0;for(let i=17;i<=26;i++)y+=P[i].y;brow=y/10/H;}
+  return {brow,rx:eL[0],ry:eL[1],lx:eR[0],ly:eR[1]};
+}
+/* slide 4 in the file: the long horizontal line on the brow line; the short line from the midline to the patient's RIGHT
+   pupil, and the second one from the midline towards the LEFT pupil with the same length */
+function fitLipLines(doc,list){
+  if(!$("fitLines").checked)return;
+  const s=list.find(t=>t.k===4&&t.cat==="frontal_lips_apart"&&assign[t.id]&&assign[t.id].photoId);if(!s)return;
+  const a=assign[s.id];if(!a||!a.l4||a.fmid==null)return;
+  const f=frameRect(s),yB=Math.round(f.top+a.l4.brow*f.h),yE=Math.round(f.top+(a.l4.ry+a.l4.ly)/2*f.h),mx=f.left+a.fmid*f.w,rx=f.left+a.l4.rx*f.w,len=Math.max(1,Math.round(Math.abs(mx-rx)));
+  const hs=[];
+  for(const el of doc.getElementsByTagNameNS(NS.p,"cxnSp")){const sp=[...el.children].find(c=>c.localName==="spPr"),xf=sp&&[...sp.children].find(c=>c.localName==="xfrm");if(!xf)continue;
+    const o=[...xf.children].find(c=>c.localName==="off"),e=[...xf.children].find(c=>c.localName==="ext");if(!o||!e)continue;
+    if(+e.getAttribute("cy")!==0||Math.round((+xf.getAttribute("rot")||0)/5400000)%2)continue;hs.push({o,e,x:+o.getAttribute("x"),w:+e.getAttribute("cx")});}
+  if(!hs.length)return;
+  const long=hs.reduce((m,h)=>h.w>m.w?h:m,hs[0]);if(long.w>SLIDE_W*.5)long.o.setAttribute("y",String(yB));
+  const shorts=hs.filter(h=>h!==long&&h.w<SLIDE_W*.25).sort((p,q)=>p.x-q.x);
+  // the line on the side of the picture where the patient's right eye is (left of the picture), then the other side
+  const [s1,s2]=shorts;const toR=rx<mx;
+  if(s1){s1.o.setAttribute("x",String(Math.round(toR?mx-len:mx)));s1.o.setAttribute("y",String(yE));s1.e.setAttribute("cx",String(len));}
+  if(s2){s2.o.setAttribute("x",String(Math.round(toR?mx:mx-len)));s2.o.setAttribute("y",String(yE));s2.e.setAttribute("cx",String(len));}
 }
 /* the template's own straight lines of one direction ("v": vertical, "h": horizontal), except the named ones */
 function removeTemplateLines(doc,dir,keep){
@@ -6051,6 +6096,7 @@ $("genBtn").onclick=async()=>{try{syncName();}catch(_){}
       fitIntraoralMidline(doc,list);
       if(!list.some(s=>s.k===15))addOcclusalRowLine(doc,list);   // slide 15: no horizontal line in the file
       addFaceMidlines(doc,list);
+      if(list.some(s=>s.k===4))fitLipLines(doc,list);
       removeOccMasks(doc,list);
       // drop image relationships this slide no longer uses
       const xmlStr=ser(doc);
